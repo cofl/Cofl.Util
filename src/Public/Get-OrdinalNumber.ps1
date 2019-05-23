@@ -11,7 +11,7 @@ function Get-OrdinalNumber
         [int]$ModTen = $Number % 10
 
         [string]$Suffix = 'th'
-        if($ModHundred -lt 10)
+        if($ModHundred -gt 20 -or $ModHundred -lt 10)
         {
             switch($ModTen)
             {
