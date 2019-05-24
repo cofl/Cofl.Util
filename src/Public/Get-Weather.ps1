@@ -208,7 +208,7 @@ function Get-Weather
         [string]$OutputString = $Output.ToString().Trim()
         if($Speakable)
         {
-            $OutputString = $OutputString -replace '\bwind(s?)\b', 'winnd$1'
+            $OutputString = $OutputString -replace '\bwind(s?)\b', 'winnd$1' -replace '\bmph\b', 'miles per hour'
         }
         return $OutputString
     }
