@@ -15,18 +15,18 @@ if($BuildRoot -eq '/build')
 
 try
 {
-    [string]$ModuleVersion = Import-PowerShellDataFile -Path "$PSScriptRoot/src/Cofl.Util.psd1" | Select-Object -ExpandProperty ModuleVersion
+    [string]$ModuleVersion = (Import-PowerShellDataFile -Path "$PSScriptRoot/src/Cofl.Util.psd1").ModuleVersion
     [string]$BuildTarget = "$BuildRoot/Cofl.Util/$ModuleVersion/"
 
-    $null = Remove-Item -Recurse -Force -Path $BuildRoot
+    $null = Remove-Item -Recurse -Force -Path $BuildRoot -ErrorAction SilentlyContinue
     $null = New-Item -ItemType Directory -Path $BuildTarget -Force
-    $null = Copy-Item -Path "$PSScriptRoot/*" -Recurse -Destination $BuildTarget -Force
+    $null = Copy-Item -Path "$PSScriptRoot/src/*" -Recurse -Destination $BuildTarget -Force
 
     $env:PSModulePath += [System.IO.Path]::PathSeparator + $BuildRoot
 
     Deploy 'Cofl.Util' {
         By PSGalleryModule {
-            FromSource -Source 'Cofl.Util'
+            FromSource -Source $BuildTarget
             To -Targets PSGallery
             WithOptions -Options @{
                 ApiKey = $env:CoflNugetAPIKey
