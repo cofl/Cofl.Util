@@ -12,11 +12,11 @@ This cmdlet returns immediately, and uses a job to avoid blocking the main threa
 The Windows Location API is used.
 
 .EXAMPLE
-PS C:\> Say-DailyWeather
+PS C:\> Get-DailyWeather
 
 Performs a greeting and says the current forecast.
 #>
-function Say-DailyWeather
+function Get-DailyWeather
 {
     [CmdletBinding()]
     PARAM (
@@ -44,7 +44,7 @@ function Say-DailyWeather
             @(
                 "$Greeting Today is $($Now.ToString('dddd, MMMM')) $(Get-OrdinalNumber $Now.Day), $($Century) $($YearString). It is $($Now.ToString('t'))."
                 (Get-Weather -Latitude $Location.Latitude -Longitude $Location.Longitude -ForecastType Detailed -IncludeLocation -IncludeTime -Speakable)
-            ) | Say-String
+            ) | Invoke-Speech
         }
     }
 }
