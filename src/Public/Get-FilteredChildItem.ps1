@@ -3,6 +3,20 @@ using namespace System.Collections.Generic
 using namespace System.IO
 using namespace System.Text.RegularExpressions
 
+<#
+.SYNOPSIS
+Enumerates files using .gitignore-like filters.
+
+.DESCRIPTION
+Get-FilteredChildItem uses flat-file filters to enumerate files in directory hierarchies similar to
+.gitignore files. A best-effort attempt is made to be compatible with the syntax of .gitignore files,
+which can be read online [here](https://git-scm.com/docs/gitignore#_pattern_format).
+
+.EXAMPLE
+PS C:\> Get-FilteredChildItem -Path $Path -IgnoreFileName .gitignore
+
+Lists files under the directory $Path that aren't excluded by patterns declared in files with the name .gitignore.
+#>
 function Get-FilteredChildItem
 {
     [CmdletBinding(DefaultParameterSetName='Default')]
