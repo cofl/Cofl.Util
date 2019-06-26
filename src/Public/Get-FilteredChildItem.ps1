@@ -32,10 +32,8 @@ function Get-FilteredChildItem
         [regex]$UnescapeCharacters = [regex]::new('^\\|\\(?=\s)')
         # Unescape characters used in patterns
         [regex]$UnescapePatternCharacters = [regex]::new('^\\(?=[\[\\\*\?])')
-        # Match a drive name at the beginning of a path
-        [regex]$IsWindowsPath = [regex]::new('^[^:]+:\\')
         # Match glob patterns
-        [regex]$GlobPatterns = [regex]::new('(?<!\\)\[(?<set>[^/]+)\]|(?<endglob>/\*\*$)|(?<glob>(?<!\\)\*\*)|(?<star>(?<!\\)\*)|(?<any>(?<!\\)\?)|(?<text>[^/]+)')
+        [regex]$GlobPatterns = [regex]::new('(?<!\\)\[(?<set>[^/]+)\]|(?<endglob>/\*\*)|(?<glob>(?<!\\)\*\*)|(?<star>(?<!\\)\*)|(?<any>(?<!\\)\?)|(?<text>(?:[^/?*[]|(?<=\\)[?*[])+)')
     }
 
     process
@@ -46,8 +44,11 @@ function Get-FilteredChildItem
         # added ignore rules are popped from the above list.
         [Dictionary[string,uint32]]$IgnoreRulePerDirectoryCounts = [Dictionary[string,uint32]]::new()
         [Stack[DirectoryInfo]]$ReverseDirectoryStack = [Stack[DirectoryInfo]]::new()
-        [Stack[FileInfo]]$FileQueue = [Stack[FileInfo]]::new()
-        $DirectoryStack.Push([DirectoryInfo]::new((Get-Item -LiteralPath $Path.FullName).FullName))
+        [Queue[FileInfo]]$FileQueue = [Queue[FileInfo]]::new()
+        [string]$BasePath = (Get-Item -LiteralPath $Path.FullName).FullName.Replace('\', '/')
+        $DirectoryStack.Push([DirectoryInfo]::new($BasePath))
+        [int]$BasePathLength = $BasePath.Length
+        $BasePath = [regex]::Escape($BasePath)
 
         while($DirectoryStack.Count -gt 0)
         {
@@ -84,15 +85,14 @@ function Get-FilteredChildItem
                     } elseif($Item.Name -ne $IgnoreFileName)
                     {
                         # Otherwise, if we found a file (that isn't the ignore file), add it
-                        # to the stack of files to be processed. Because they're added in
-                        # reverse order here, they'll come out the right way down below.
-                        $FileQueue.Push([FileInfo]$Item)
+                        # to the queue of files to be processed.
+                        $FileQueue.Enqueue([FileInfo]$Item)
                     } else
                     {
                         # We have a file with the same name as the ignore file.
                         if($IncludeIgnoreFiles)
                         {
-                            $FileQueue.Push([FileInfo]$Item)
+                            $FileQueue.Enqueue([FileInfo]$Item)
                         }
                         try
                         {
@@ -114,19 +114,24 @@ function Get-FilteredChildItem
                                     $Line = $Line.Substring(1)
                                 }
                                 # Do an initial trim/unescape/prefix/suffix
-                                [Match]$Drive = $IsWindowsPath.Match($Top.FullName)
+                                [string]$Base = $Top.FullName.Substring($BasePathLength).Replace('\', '/')
                                 $Line = $UnescapeCharacters.Replace($TrailingWhitespace.Replace($Line, ''), '')
-                                $Line = if($Line[0] -eq '/') { "$($Top.FullName.Replace('\','/'))$Line" } elseif($Drive.Success){ "$($Drive.Value.Replace('\','/'))**/$Line" } else { "**/$Line" }
-                                $Line = if($Line[-1] -eq '/') { "$Line**" } else { "$Line/**" }
+                                $Line = if($Line[0] -eq '/') { "$Base$Line" } else { "$Base/**/$Line" }
+                                $Line = if($Line[-1] -eq '/') { "$Line*/**" } else { "$Line/**" }
 
                                 # Transform the cleaned pattern into a regex and add it to the ignore rule list
-                                [void]$IgnoreRules.AddFirst([Tuple[bool,regex]]::new($IsExcludeRule, [regex]::new($GlobPatterns.Replace($Line, [MatchEvaluator]{
+                                [void]$IgnoreRules.AddFirst([Tuple[bool,regex]]::new($IsExcludeRule, [regex]::new("^$BasePath$($GlobPatterns.Replace($Line, [MatchEvaluator]{
                                     param([Match]$Match)
 
                                     # In this delegate, we replace the various glob patterns with regex patterns, and escape all other text (except /).
                                     if($Match.Groups['set'].Success)
                                     {
-                                        return "[$([regex]::Escape($Match.Groups['set'].Value))]"
+                                        [string]$Escaped = [regex]::Escape($Match.Groups['set'].Value)
+                                        if($Escaped[0] -eq '!')
+                                        {
+                                            $Escaped = '^' + $Escaped.Substring(1)
+                                        }
+                                        return "[$Escaped]"
                                     } elseif($Match.Groups['endglob'].Success)
                                     {
                                         return '(/.*)?'
@@ -143,7 +148,7 @@ function Get-FilteredChildItem
                                     {
                                         return [regex]::Escape($UnescapePatternCharacters.Replace($Match.Groups['text'].Value, ''))
                                     }
-                                }))))
+                                }))$")))
                                 Write-Debug -Message "Added rule ""$($IgnoreRules.First.Value.Item2)"" in directory ""$($Top.FullName)""."
                                 $IgnoreRuleCount += 1
                             }
@@ -202,7 +207,7 @@ function Get-FilteredChildItem
                 {
                     # .Reset() lets us re-use the same iterator over and over again
                     $IgnoreRule.Reset()
-                    [FileInfo]$FileItem = $FileQueue.Pop()
+                    [FileInfo]$FileItem = $FileQueue.Dequeue()
                     # For .gitignore's, the last rule that applies is the one
                     # that takes precedence. The rules are stored in reverse
                     # order of their declaration, so we just need to traverse
