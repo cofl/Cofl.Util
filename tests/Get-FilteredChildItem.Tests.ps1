@@ -79,6 +79,20 @@ Describe 'Get-FilteredChildItem' {
         Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -Be 'test1', 'test2'
     }
 
+    It 'Allows literal characters' {
+        In $TempDirectory {
+            New-Item -ItemType File -Name '!secret!.txt'
+            New-Item -ItemType File -Name '#hashcodes#'
+            New-ITem -ItemType File -Name 'normal'
+            New-Item -ItemType File -Name $IgnoreFileName -Value @'
+\!secret!.txt
+\#hashcodes#
+'@
+        }
+
+        Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -Be 'normal'
+    }
+
     Context 'Excludes one file' {
         It 'Excludes one file' {
             In $TempDirectory {
@@ -323,6 +337,43 @@ Describe 'Get-FilteredChildItem' {
             }
 
             Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be "${TempDirectory}${DirectorySeparator}not-me", "${TempDirectory}${DirectorySeparator}inner2${DirectorySeparator}test-file", "${TempDirectory}${DirectorySeparator}inner2${DirectorySeparator}test${DirectorySeparator}potato"
+        }
+    }
+
+    Context 'Exclusions' {
+        It 'Excludes all files but one' {
+            In $TempDirectory {
+                New-Item -ItemType File -Name 'test-file'
+                New-Item -ItemType File -Name 'task-file'
+                New-Item -ItemType File -Name 'test.txt'
+                New-Item -ItemType File -Name $IgnoreFileName -Value @'
+*
+!test.txt
+'@
+            }
+
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -Be 'test.txt'
+        }
+
+        It 'Excludes all files but one (name) in multiple directories' {
+            In $TempDirectory {
+                New-Item -ItemType File -Name 'test-file'
+                New-Item -ItemType File -Name 'task-file'
+                New-Item -ItemType File -Name 'test.txt'
+                New-Item -ItemType File -Name $IgnoreFileName -Value @'
+*
+!inner/
+!test.txt
+'@
+                In (New-Item -ItemType Directory -Name 'inner') {
+                    In (New-Item -ItemType Directory -Name 'test') {
+                        New-Item -ItemType File -Name 'potato'
+                    }
+                    New-Item -ItemType File -Name 'test.txt'
+                }
+            }
+
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be "${TempDirectory}${DirectorySeparator}test.txt", "${TempDirectory}${DirectorySeparator}inner${DirectorySeparator}test.txt"
         }
     }
 }
