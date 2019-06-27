@@ -12,34 +12,119 @@ Get-FilteredChildItem uses flat-file filters to enumerate files in directory hie
 .gitignore files. A best-effort attempt is made to be compatible with the syntax of .gitignore files,
 which can be read online [here](https://git-scm.com/docs/gitignore#_pattern_format).
 
+The use of Unix directory separators (/) is mandatory in patterns.
+
 .EXAMPLE
 PS C:\> Get-FilteredChildItem -Path $Path -IgnoreFileName .gitignore
 
 Lists files under the directory $Path that aren't excluded by patterns declared in files with the name .gitignore.
+
+.EXAMPLE
+PS C:\> Get-FilteredChildItem -Path $Path -IgnorePattern 'pattern1', 'pattern2', 'etc'
+
+Lists files under the directory $Path that aren't excluded by the patterns passed to the parameter IgnorePattern.
+
+.EXAMPLE
+PS C:\> Get-FilteredChildItem -Path $Path -IgnoreFileName .gitignore -Ignored
+
+Lists files under the directory $Path that are excluded by patterns declared in files with the name .gitignore.
+
+.EXAMPLE
+PS C:\> Get-FilteredChildItem -Path $Path -IgnoreFileName .gitignore -Hidden
+
+Lists only hidden files under the directory $Path that aren't excluded by patterns declared in files with the name
+.gitignore.
+
+.EXAMPLE
+PS C:\> Get-FilteredChildItem -Path $Path -IgnoreFileName .gitignore -Force
+
+Lists both hidden and non-hidden files under the directory $Path that aren't excluded by patterns declared in files
+with the name .gitignore.
+
+.EXAMPLE
+PS C:\> Get-FilteredChildItem -Path $Path -IgnoreFileName .gitignore -Directory
+
+Lists directories under the directory $Path that contain files that aren't excluded by patterns declared in files
+with the name .gitignore.
+
+.EXAMPLE
+PS C:\> Get-FilteredChildItem -Path $Path -IgnoreFileName .gitignore -Depth 1
+
+Lists files under the directory $Path that aren't excluded by patterns declared in files with the name .gitignore,
+up to a maximum directory depth of 1 (the enumeration will include the contents of the immediate subdirectories of
+the directory $Path).
+
+.INPUTS
+System.IO.DirectoryInfo The root directory to begin enumeration from.
+
+.OUTPUTS
+System.IO.FileInfo
+System.IO.DirectoryInfo
+
+.PARAMETER Path
+The path to list from. Must be a directory. Accepts pipeline input.
+
+.PARAMETER IgnoreFileName
+The name of files that contain pattern rule definitions.
+
+.PARAMETER IncludeIgnoreFiles
+Include pattern rule definition files in the output unless they themselves
+are ignored.
+
+The default behavior is that they are not included in the output.
+
+.PARAMETER IgnorePattern
+Additional pattern definitions that are applied as if they were defined at the
+top of a pattern rule definition file in the directory defined in Path.
+
+.PARAMETER Directory
+Emit the names of directories that are ancestors of files that would be output
+by this cmdlet.
+
+.PARAMETER Depth
+Determines the number of subdirectory levels that are included in the recursion.
+
+The default is near-infinite depth (UInt32.MaxValue).
+
+.PARAMETER Hidden
+Gets only hidden files or directories. By default, Get-FilteredChildItem gets only
+non-hidden items, but you can use the Force parameter to include hidden items in
+the results.
+
+.PARAMETER Force
+Gets hidden files or directories in addition to non-hidden items.
+
+.PARAMETER Ignored
+Invert all rules and only output files or directories that would have been ignored.
+
+.LINK
+https://git-scm.com/docs/gitignore#_pattern_format
 #>
 function Get-FilteredChildItem
 {
     [CmdletBinding(DefaultParameterSetName='Default')]
+    [OutputType([System.IO.FileSystemInfo])]
     PARAM (
         [Parameter(Mandatory=$true,ValueFromPipeline=$true,Position=0)]
-            # The path to list from. Accepts pipeline input.
+            [Alias('LiteralPath')]
+            [Alias('PSPath')]
+            # The path to list from. Must be a directory. Accepts pipeline input.
             [DirectoryInfo]$Path,
         [Parameter()]
             [Alias('ifn')]
-            # The name of the ignore files.
-            [string]$IgnoreFileName = '.gitignore',
+            # The name of the pattern rule definition files.
+            [string]$IgnoreFileName,
         [Parameter()]
             [Alias('ip')]
             # A set of patterns to be applied globally from the root folder.
             # This set is added before any patterns defined in ignore files.
             [string[]]$IgnorePattern,
         [Parameter(ParameterSetName='Default')]
-            # Emit the names of just the files. This is the default behavior.
-            [switch]$File,
-        [Parameter(ParameterSetName='Default')]
             # Include the ignore files in the listing, unless explicitly ignored by a filter.
             [switch]$IncludeIgnoreFiles,
         [Parameter(Mandatory=$true,ParameterSetName='Directory')]
+            [Alias('ad')]
+            [Alias('d')]
             # Emit the names of just the directories.
             [switch]$Directory,
         [Parameter()]
@@ -188,28 +273,31 @@ function Get-FilteredChildItem
             $CurrentDepth += 1
             try
             {
-                # First, look for the ignore file.
-                [FileInfo]$IgnoreFile = [FileInfo]::new([Path]::Combine($Top.FullName, $IgnoreFileName))
-                if($IgnoreFile.Exists -and !$IgnoreFile.Attributes.HasFlag([FileAttributes]::Directory))
+                # First, look for the ignore file if there is one.
+                if(![string]::IsNullOrEmpty($IgnoreFileName))
                 {
-                    try
+                    [FileInfo]$IgnoreFile = [FileInfo]::new([Path]::Combine($Top.FullName, $IgnoreFileName))
+                    if($IgnoreFile.Exists -and !$IgnoreFile.Attributes.HasFlag([FileAttributes]::Directory))
                     {
-                        # Process each line of the file as a new rule.
-                        [StreamReader]$Reader = [StreamReader]::new($IgnoreFile.OpenRead())
-                        [string]$BasePath = [regex]::Escape($Top.FullName.Replace('\', '/'))
-                        [AllowNull()][string]$Line = $null
-                        while($null -ne ($Line = $Reader.ReadLine()))
+                        try
                         {
-                            $IgnoreRuleCount += Add-PatternRule -BasePath $BasePath -Pattern $Line
-                        }
-                    } finally
-                    {
-                        # A finally block always runs.
-                        # This one is used to dispose of the stream reader and its underlying stream.
-                        if($null -ne $Reader)
+                            # Process each line of the file as a new rule.
+                            [StreamReader]$Reader = [StreamReader]::new($IgnoreFile.OpenRead())
+                            [string]$BasePath = [regex]::Escape($Top.FullName.Replace('\', '/'))
+                            [AllowNull()][string]$Line = $null
+                            while($null -ne ($Line = $Reader.ReadLine()))
+                            {
+                                $IgnoreRuleCount += Add-PatternRule -BasePath $BasePath -Pattern $Line
+                            }
+                        } finally
                         {
-                            $Reader.Close()
-                            $Reader = $null
+                            # A finally block always runs.
+                            # This one is used to dispose of the stream reader and its underlying stream.
+                            if($null -ne $Reader)
+                            {
+                                $Reader.Close()
+                                $Reader = $null
+                            }
                         }
                     }
                 }
