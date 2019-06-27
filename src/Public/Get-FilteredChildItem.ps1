@@ -5,7 +5,7 @@ using namespace System.Text.RegularExpressions
 
 <#
 .SYNOPSIS
-Enumerates files using .gitignore-like filters.
+Enumerates files using .gitignore-like flat-file filters.
 
 .DESCRIPTION
 Get-FilteredChildItem uses flat-file filters to enumerate files in directory hierarchies similar to
