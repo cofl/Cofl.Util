@@ -21,19 +21,41 @@ function Get-FilteredChildItem
 {
     [CmdletBinding(DefaultParameterSetName='Default')]
     PARAM (
-        # A path and an ignore file name are mandatory, but to make things nice you can give it paths on the pipeline.
         [Parameter(Mandatory=$true,ValueFromPipeline=$true,Position=0)]
-            # The path to list from.
-            [FileInfo]$Path,
-        [Parameter(Mandatory=$true)]
+            # The path to list from. Accepts pipeline input.
+            [DirectoryInfo]$Path,
+        [Parameter()]
+            [Alias('ifn')]
             # The name of the ignore files.
-            [string]$IgnoreFileName,
-        [Parameter(ParameterSetName='ListDirectories')]
-            # Emit the names of the directories, instead of the files. Directory paths are guaranteed to be unique.
-            [switch]$Directory,
+            [string]$IgnoreFileName = '.gitignore',
+        [Parameter()]
+            [Alias('ip')]
+            # A set of patterns to be applied globally from the root folder.
+            # This set is added before any patterns defined in ignore files.
+            [string[]]$IgnorePattern,
+        [Parameter(ParameterSetName='Default')]
+            # Emit the names of just the files. This is the default behavior.
+            [switch]$File,
         [Parameter(ParameterSetName='Default')]
             # Include the ignore files in the listing, unless explicitly ignored by a filter.
-            [switch]$IncludeIgnoreFiles
+            [switch]$IncludeIgnoreFiles,
+        [Parameter(Mandatory=$true,ParameterSetName='Directory')]
+            # Emit the names of just the directories.
+            [switch]$Directory,
+        [Parameter()]
+            # The depth to recurse to. Supplying a value of "0" disables recursion. The default is "infinite" depth.
+            [uint32]$Depth = [uint32]::MaxValue,
+        [Parameter()]
+            [Alias('ah')] # like Get-ChildItem
+            # Gets only hidden files or directories. By default, Get-FilteredChildItem gets only non-hidden items,
+            # but you can use the Force parameter to include hidden items in the results.
+            [switch]$Hidden,
+        [Parameter()]
+            # Gets hidden files and directories. By default, hidden items are excluded.
+            [switch]$Force,
+        [Parameter()]
+            # Gets only ignored files or directories.
+            [switch]$Ignored
     )
 
     begin
@@ -46,27 +68,97 @@ function Get-FilteredChildItem
         [regex]$UnescapeCharacters = [regex]::new('^\\|\\(?=\s)')
         # Unescape characters used in patterns
         [regex]$UnescapePatternCharacters = [regex]::new('^\\(?=[\[\\\*\?])')
-        # Match glob patterns
+        # Match glob patterns and everything that isn't one
         [regex]$GlobPatterns = [regex]::new('(?<!\\)\[(?<set>[^/]+)\]|(?<glob>/\*\*)|(?<star>(?<!\\)\*)|(?<any>(?<!\\)\?)|(?<text>(?:[^/?*[]|(?<=\\)[?*[])+)')
-    }
 
-    process
-    {
-        [Stack[DirectoryInfo]]$DirectoryStack = [Stack[DirectoryInfo]]::new()
+        # Match evaluator used to convert glob patterns/everything else into proper regex strings
+        [MatchEvaluator]$GlobPatternEvaluator = [MatchEvaluator]{
+            param([Match]$Match)
+
+            # In this delegate, we replace the various glob patterns with regex patterns, and escape all other text (except /).
+            if($Match.Groups['set'].Success)
+            {
+                [string]$Escaped = [regex]::Escape($Match.Groups['set'].Value)
+                if($Escaped[0] -eq '!')
+                {
+                    $Escaped = '^' + $Escaped.Substring(1)
+                }
+                return "[$Escaped]"
+            } elseif($Match.Groups['glob'].Success)
+            {
+                return '(/.*)?'
+            } elseif($Match.Groups['star'].Success)
+            {
+                return '[^/]*'
+            } elseif($Match.Groups['any'].Success)
+            {
+                return '.'
+            } else
+            {
+                return [regex]::Escape($UnescapePatternCharacters.Replace($Match.Groups['text'].Value, ''))
+            }
+        }
+
+        [LinkedList[DirectoryInfo]]$Queue = [LinkedList[DirectoryInfo]]::new()
         [LinkedList[Tuple[bool,bool,regex]]]$IgnoreRules = [LinkedList[Tuple[bool,bool,regex]]]::new()
         # This dictionary is also used as a visited tracker. The second time a directory is seen, its
         # added ignore rules are popped from the above list.
         [Dictionary[string,uint32]]$IgnoreRulePerDirectoryCounts = [Dictionary[string,uint32]]::new()
-        [Stack[DirectoryInfo]]$ReverseDirectoryStack = [Stack[DirectoryInfo]]::new()
-        [Queue[FileInfo]]$FileQueue = [Queue[FileInfo]]::new()
-        [string]$BasePath = (Get-Item -LiteralPath $Path.FullName).FullName.Replace('\', '/').TrimEnd('/')
-        $DirectoryStack.Push([DirectoryInfo]::new($BasePath))
-        [int]$BasePathLength = $BasePath.Length
-        $BasePath = [regex]::Escape($BasePath)
+        [Dictionary[string,bool]]$DirectoryHasValidChildren = [Dictionary[string,bool]]::new()
+        [Stack[DirectoryInfo]]$OutputDirectories = [Stack[DirectoryInfo]]::new()
+        [uint32]$CurrentDepth = 0
 
-        while($DirectoryStack.Count -gt 0)
+        # Add a rule to the rule list (or not)
+        # Returns how many rules were added.
+        function Add-PatternRule
         {
-            [DirectoryInfo]$Top = $DirectoryStack.Pop()
+            PARAM (
+                [Parameter(Mandatory=$true)][string]$BasePath,
+                [Parameter(Mandatory=$true)][AllowEmptyString()][string]$Pattern
+            )
+
+            if($CommentLine.IsMatch($Pattern))
+            {
+                return 0
+            }
+            [bool]$IsExcludeRule = $false
+            if($Pattern[0] -eq '!')
+            {
+                $IsExcludeRule = $true
+                $Pattern = $Pattern.Substring(1)
+            }
+            # Do an initial trim/unescape/prefix/suffix
+            $Pattern = $UnescapeCharacters.Replace($TrailingWhitespace.Replace($Pattern, ''), '')
+            [bool]$IsDirectoryRule = $Pattern[-1] -eq '/'
+            $Pattern = if($Pattern[0] -eq '/') { $Pattern } else { "/**/$Pattern" }
+            $Pattern = if($IsDirectoryRule) { $Pattern } else { "$Pattern/**" }
+
+            # Transform the cleaned pattern into a regex and add it to the ignore rule list
+            [void]$IgnoreRules.AddFirst([Tuple[bool,bool,regex]]::new($IsExcludeRule, $IsDirectoryRule, [regex]::new("^$BasePath$($GlobPatterns.Replace($Pattern, $GlobPatternEvaluator))$")))
+            return 1
+        }
+    }
+
+    process
+    {
+        $Queue.Clear()
+        $IgnoreRules.Clear()
+        $IgnoreRulePerDirectoryCounts.Clear()
+        $DirectoryHasValidChildren.Clear()
+        [void]$Queue.AddFirst([DirectoryInfo]::new((Get-Item -LiteralPath $Path.FullName).FullName.TrimEnd('\', '/')))
+        [uint32]$IgnoreRuleCount = 0
+        $CurrentDepth = 0
+
+        [string]$BasePath = [regex]::Escape($Queue.First.Value.FullName.Replace('\', '/'))
+        foreach($Pattern in $IgnorePattern)
+        {
+            $IgnoreRuleCount += Add-PatternRule -BasePath $BasePath -Pattern $Pattern
+        }
+
+        while($Queue.Count -gt 0)
+        {
+            [LinkedListNode[DirectoryInfo]]$NextNode = $Queue.First
+            [DirectoryInfo]$Top = $NextNode.Value
             if($IgnoreRulePerDirectoryCounts.ContainsKey($Top.FullName))
             {
                 # If this is the second time we've seen this node, remove the rules
@@ -79,175 +171,140 @@ function Get-FilteredChildItem
                     $IgnoreRuleCount -= 1
                 }
                 [void]$IgnoreRulePerDirectoryCounts.Remove($Top.FullName)
+                $Queue.RemoveFirst()
+                $CurrentDepth -= 1
+
+                if($DirectoryHasValidChildren[$Top.FullName])
+                {
+                    # If directories are being output, push them onto a stack.
+                    # Directories are re-encountered in reverse order, so they
+                    # need to be re-reversed before being output.
+                    $OutputDirectories.Push($Top)
+                    $DirectoryHasValidChildren[$Top.Parent.FullName] = $true
+                    [void]$DirectoryHasValidChildren.Remove($Top.FullName)
+                }
                 continue
             }
+            $CurrentDepth += 1
             try
             {
-                # For each file or directory...
-                [IEnumerator[FileSystemInfo]]$Entries = $Top.EnumerateFileSystemInfos().GetEnumerator()
-                [uint32]$IgnoreRuleCount = 0
-                while($Entries.MoveNext())
+                # First, look for the ignore file.
+                [FileInfo]$IgnoreFile = [FileInfo]::new([Path]::Combine($Top.FullName, $IgnoreFileName))
+                if($IgnoreFile.Exists -and !$IgnoreFile.Attributes.HasFlag([FileAttributes]::Directory))
                 {
-                    [FileSystemInfo]$Item = $Entries.Current
-                    if($Item.Attributes.HasFlag([FileAttributes]::Directory))
+                    try
                     {
-                        # If we found a directory, add it to the revere stack. The reverse
-                        # stack is used to fix the processing order of the main stack
-                        # (directories are popped in reverse order off this stack, and
-                        # added correctly to the main stack below).
-                        $ReverseDirectoryStack.Push([DirectoryInfo]$Item)
-                    } elseif($Item.Name -ne $IgnoreFileName)
-                    {
-                        # Otherwise, if we found a file (that isn't the ignore file), add it
-                        # to the queue of files to be processed.
-                        $FileQueue.Enqueue([FileInfo]$Item)
-                    } else
-                    {
-                        # We have a file with the same name as the ignore file.
-                        if($IncludeIgnoreFiles)
+                        # Process each line of the file as a new rule.
+                        [StreamReader]$Reader = [StreamReader]::new($IgnoreFile.OpenRead())
+                        [string]$BasePath = [regex]::Escape($Top.FullName.Replace('\', '/'))
+                        [AllowNull()][string]$Line = $null
+                        while($null -ne ($Line = $Reader.ReadLine()))
                         {
-                            $FileQueue.Enqueue([FileInfo]$Item)
+                            $IgnoreRuleCount += Add-PatternRule -BasePath $BasePath -Pattern $Line
                         }
-                        try
+                    } finally
+                    {
+                        # A finally block always runs.
+                        # This one is used to dispose of the stream reader and its underlying stream.
+                        if($null -ne $Reader)
                         {
-                            [StreamReader]$Reader = [StreamReader]::new(([FileInfo]$Item).OpenRead())
-                            # We can't give $Line the type string, even though that's what it is,
-                            # because PowerShell won't let us assign null to a string variable
-                            # (it gets converted to an empty string, which is valid).
-                            $Line = $null
-                            while($null -ne ($Line = $Reader.ReadLine()))
-                            {
-                                if($CommentLine.IsMatch($Line))
-                                {
-                                    continue
-                                }
-                                [bool]$IsExcludeRule = $false
-                                if($Line[0] -eq '!')
-                                {
-                                    $IsExcludeRule = $true
-                                    $Line = $Line.Substring(1)
-                                }
-                                # Do an initial trim/unescape/prefix/suffix
-                                [string]$Base = $Top.FullName.Substring($BasePathLength).Replace('\', '/')
-                                $Line = $UnescapeCharacters.Replace($TrailingWhitespace.Replace($Line, ''), '')
-                                [bool]$IsDirectoryRule = $Line[-1] -eq '/'
-                                $Line = if($Line[0] -eq '/') { "$Base$Line" } else { "$Base/**/$Line" }
-                                $Line = if($IsDirectoryRule) { $Line } else { "$Line/**" }
-
-                                # Transform the cleaned pattern into a regex and add it to the ignore rule list
-                                [void]$IgnoreRules.AddFirst([Tuple[bool,bool,regex]]::new($IsExcludeRule, $IsDirectoryRule, [regex]::new("^$BasePath$($GlobPatterns.Replace($Line, [MatchEvaluator]{
-                                    param([Match]$Match)
-
-                                    # In this delegate, we replace the various glob patterns with regex patterns, and escape all other text (except /).
-                                    if($Match.Groups['set'].Success)
-                                    {
-                                        [string]$Escaped = [regex]::Escape($Match.Groups['set'].Value)
-                                        if($Escaped[0] -eq '!')
-                                        {
-                                            $Escaped = '^' + $Escaped.Substring(1)
-                                        }
-                                        return "[$Escaped]"
-                                    } elseif($Match.Groups['glob'].Success)
-                                    {
-                                        return '(/.*)?'
-                                    } elseif($Match.Groups['star'].Success)
-                                    {
-                                        return '[^/]*'
-                                    } elseif($Match.Groups['any'].Success)
-                                    {
-                                        return '.'
-                                    } else
-                                    {
-                                        return [regex]::Escape($UnescapePatternCharacters.Replace($Match.Groups['text'].Value, ''))
-                                    }
-                                }))$")))
-                                $IgnoreRuleCount += 1
-                            }
-                        } finally
-                        {
-                            # A finally block always runs.
-                            # This one is used to dispose of the stream reader and its underlying stream.
-                            # In C#, this would be a "using" pattern:
-                            #
-                            #     using(var reader = new StreamReader(item.OpenRead())) { ... }
-                            #
-                            if($null -ne $Reader)
-                            {
-                                $Reader.Close()
-                                $Reader = $null
-                            }
+                            $Reader.Close()
+                            $Reader = $null
                         }
                     }
                 }
                 # For each directory in our stack from where we are now up to the root of the search,
-                # we keep track of how many rules were added in that directory. We then put the
-                # current directory back onto the stack, so we'll see it a second time after all of
-                # its children have been processed. That time around, we'll remove this many rules
-                # from the start of the rule list, and stop.
+                # we keep track of how many rules were added in that directory. The next time this
+                # directory is at the front of the queue, all its children will have been processed,
+                # so we can remove the rules associated with this directory.
                 $IgnoreRulePerDirectoryCounts[$Top.FullName] = $IgnoreRuleCount
-                $DirectoryStack.Push($Top)
+                $IgnoreRuleCount = 0
 
+                # Then, for each file or directory...
+                [IEnumerator[FileSystemInfo]]$Entries = $Top.EnumerateFileSystemInfos().GetEnumerator()
                 [IEnumerator[Tuple[bool,bool,regex]]]$IgnoreRule = $IgnoreRules.GetEnumerator()
-                # Empty the reverse stack onto the normal stack. This fixes the processing
-                # order.
-                # This is a named loop. Naming the loop lets us continue this loop
-                # from inside the inner loop.
-                :DirectoryLoop
-                while($ReverseDirectoryStack.Count -gt 0)
+                :FilterLoop
+                while($Entries.MoveNext())
                 {
                     # .Reset() lets us re-use the same iterator over and over again
                     $IgnoreRule.Reset()
-                    $Top = $ReverseDirectoryStack.Pop()
-                    while($IgnoreRule.MoveNext())
+                    [FileSystemInfo]$Item = $Entries.Current
+                    [bool]$IsDirectory = $Item.Attributes.HasFlag([FileAttributes]::Directory)
+                    if(!$IsDirectory -and !$IncludeIgnoreFiles -and $Item.Name -eq $IgnoreFileName)
                     {
-                        [bool]$IsMatch = $IgnoreRule.Current.Item3.IsMatch($Top.FullName.Replace('\', '/')+'/')
-                        if($IsMatch)
-                        {
-                            # If this is an exclusion/allow rule, add the directory to the stack
-                            if($IgnoreRule.Current.Item1)
-                            {
-                                $DirectoryStack.Push($Top)
-                            }
-                            # But always continue to the next directory.
-                            continue DirectoryLoop
-                        }
+                        # If this is an ignore file and those shouldn't be processed, skip over it.
+                        continue
                     }
-                    $DirectoryStack.Push($Top)
-                }
-
-                :FileLoop
-                while($FileQueue.Count -gt 0)
-                {
-                    # .Reset() lets us re-use the same iterator over and over again
-                    $IgnoreRule.Reset()
-                    [FileInfo]$FileItem = $FileQueue.Dequeue()
-                    # For .gitignore's, the last rule that applies is the one
-                    # that takes precedence. The rules are stored in reverse
-                    # order of their declaration, so we just need to traverse
-                    # forward through the list.
-                    while($IgnoreRule.MoveNext())
+                    [bool]$IsHidden = $Item.Attributes.HasFlag([FileAttributes]::Hidden)
+                    if(!$IsDirectory -and !$Force -and ($Hidden -ne $IsHidden))
                     {
-                        if($IgnoreRule.Current.Item2)
-                        {
-                            # Skip over directory rules, those only apply to directories.
-                            continue
-                        }
-                        [bool]$IsMatch = $IgnoreRule.Current.Item3.IsMatch($FileItem.FullName.Replace('\', '/'))
-                        if($IsMatch)
-                        {
-                            # If this is an exclusion/allow rule, write out the file to the pipeline
-                            if($IgnoreRule.Current.Item1)
-                            {
-                                Write-Output -InputObject $FileItem
-                            }
-                            # But always continue to the next file.
-                            continue FileLoop
-                        }
+                        # If this is a hidden file and we're not supposed to show those, or this isn't a hidden file
+                        # and $Hidden is true, then skip this item.
+                        # Directories have to be searched always, in case they have hidden children but aren't hidden
+                        # themselves.
+                        continue
                     }
-
-                    # At this point, all the rules have been processed, and the file has been
-                    # neither excluded/allowed nor ignored. Write it to the pipeline before continuing.
-                    Write-Output -InputObject $FileItem
+                    if($IsDirectory -and $IsHidden -and !($Force -or $Hidden))
+                    {
+                        # If we aren't looking for hidden files at all and this directory is hidden, skip it.
+                        continue
+                    }
+                    [string]$ItemName = $Item.FullName.Replace('\', '/')
+                    if($IsDirectory)
+                    {
+                        # All the directory-only rules match a '/' at the end of the item name;
+                        # the non-directory-only rules also match the '/', but it can be not at the end.
+                        $ItemName += '/'
+                    }
+                    # This do {} while($false) is a GoTo. PowerShell doesn't have those,
+                    # but sometimes they're useful.
+                    :GotoLoop do {
+                        # For each rule in reverse order of declaration...
+                        while($IgnoreRule.MoveNext())
+                        {
+                            if($IgnoreRule.Current.Item2 -and !$IsDirectory)
+                            {
+                                # Skip directory ignore rules for files.
+                                continue
+                            }
+                            # This next bit is a bit complicated.
+                            # If the rule matched the item, and we aren't outputting ignored items,
+                            # then if the rule is an allow rule and we aren't outputting ignored items,
+                            # handle the item.
+                            # Otherwise, if the rule didn't match the item and we are outputting ignored
+                            # items, then if the rule is an ignore rule and we're outputting ignored items,
+                            # handle the item.
+                            if($IgnoreRule.Current.Item3.IsMatch($ItemName) -ne $Ignored)
+                            {
+                                if($IgnoreRule.Current.Item1 -ne $Ignored)
+                                {
+                                    # If this is an exclusion/allow rule, go to the write-out part.
+                                    break GotoLoop
+                                }
+                                # Otherwise, we're done here, move on to the next item
+                                continue FilterLoop
+                            }
+                        }
+                        # If no rule ignored the file, and we only want to output ignored files,
+                        # skip to the next item.
+                        if($Ignored)
+                        {
+                            continue FilterLoop
+                        }
+                    } while($false) # End GotoLoop
+                    if($IsDirectory)
+                    {
+                        if($CurrentDepth -le $Depth)
+                        {
+                            [void]$Queue.AddBefore($NextNode, [DirectoryInfo]$Item)
+                        }
+                    } elseif($Directory)
+                    {
+                        $DirectoryHasValidChildren[([FileInfo]$Item).DirectoryName] = $true
+                    } else
+                    {
+                        Write-Output -InputObject ([FileInfo]$Item)
+                    }
                 }
             } finally
             {
@@ -264,6 +321,15 @@ function Get-FilteredChildItem
                     $IgnoreRule = $null
                 }
             }
+        }
+    }
+
+    end
+    {
+        # If there are directories to output, output them in the right order.
+        while($OutputDirectories.Count -gt 0)
+        {
+            Write-Output -InputObject $OutputDirectories.Pop()
         }
     }
 }
