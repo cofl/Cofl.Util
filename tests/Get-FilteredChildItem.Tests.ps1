@@ -2,11 +2,22 @@
 
 using namespace System.IO
 
+[string]$ModuleVersion = (Import-PowerShellDataFile -Path "$PSScriptRoot/../src/Cofl.Util.PowerShell/Cofl.Util.psd1").ModuleVersion
+if(!(Get-Module -Name Cofl.Util -ErrorAction SilentlyContinue | Where-Object Version -EQ $ModuleVersion))
+{
+    & "$PSScriptRoot/../build.ps1" -Task Build
+    Import-Module "$PSScriptRoot/build/Cofl.Util/$ModuleVersion/Cofl.Util.psd1" -ErrorAction Stop
+}
+if(!(Get-Command -Name 'Get-FilteredChildItem' -ErrorAction SilentlyContinue | Where-Object Version -EQ $ModuleVersion))
+{
+    throw "Get-FilteredChildItem is not available."
+}
+
+Get-Command -Name 'Get-FilteredChildItem' | Out-String | Write-Host
+
 [string]$DirectorySeparator = [Path]::DirectorySeparatorChar
 [string]$TempDirectory = "$PSScriptRoot${DirectorySeparator}temp"
 [string]$IgnoreFileName = '.ignore'
-
-. "$PSScriptRoot/../src/Cofl.Util.PowerShell/Public/Get-FilteredChildItem.ps1"
 
 function Set-Hidden {
     PARAM (

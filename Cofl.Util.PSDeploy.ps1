@@ -10,7 +10,7 @@ if(!$env:CoflNugetAPIKey)
 try
 {
     [string]$ModuleVersion = (Import-PowerShellDataFile -Path "$PSScriptRoot/src/Cofl.Util.PowerShell/Cofl.Util.psd1").ModuleVersion
-    & "$PSScriptRoot/build.ps1" -Tasks Build
+    & "$PSScriptRoot/build.ps1" -Task Build
 
     $env:PSModulePath += [System.IO.Path]::PathSeparator + $BuildRoot
 

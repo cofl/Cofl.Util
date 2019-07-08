@@ -25,9 +25,8 @@ Task Clean -depends Init {
     }
 }
 
-Task Build -depends Clean {
-    if([string]::IsNullOrWhiteSpace($ModuleVersion))
-    {
+Task BuildPowerShell -depends Clean {
+    if([string]::IsNullOrWhiteSpace($ModuleVersion)){
         $ModuleVersion = '0.0.0'
     }
 	if(!(Test-Path -LiteralPath $ModuleOutDir)){
@@ -35,12 +34,26 @@ Task Build -depends Clean {
     }
     $dir = New-Item -ItemType Directory -Path $ModuleOutDir -Name $ModuleVersion -Verbose:$VerbosePreference -Force
 
-    & $DotNet build -c:Release
     Copy-Item -Recurse -Exclude $Exclude -Path $PowerShellSrcRoot/* -Destination $dir.FullName
-    Copy-Item -Path "$PSScriptRoot/src/Cofl.Util/bin/Release/netstandard2.0/Cofl.Util.dll" -Destination $dir.FullName
 }
 
-Task Deploy -depends BuildHelp {
+Task Build -depends BuildPowerShell {
+    if([string]::IsNullOrWhiteSpace($ModuleVersion)){
+        $ModuleVersion = '0.0.0'
+    }
+    & $DotNet build -c:Release
+    Copy-Item -Path "$PSScriptRoot/src/Cofl.Util/bin/Release/netstandard2.0/Cofl.Util.dll" -Destination "$ModuleOutDir/$ModuleVersion"
+}
+
+Task BuildDebug -depends BuildPowerShell {
+    if([string]::IsNullOrWhiteSpace($ModuleVersion)){
+        $ModuleVersion = '0.0.0'
+    }
+    & $DotNet build -c:Debug
+    Copy-Item -Path "$PSScriptRoot/src/Cofl.Util/bin/Debug/netstandard2.0/Cofl.Util.dll" -Destination "$ModuleOutDir/$ModuleVersion"
+}
+
+Task Deploy -depends Build {
 	if(!(Get-Module PSDeploy -ListAvailable)){
 		throw "$(psake.context.currentTaskName) - PSDeploy is not available, cannot deploy."
 	} else {
@@ -48,5 +61,12 @@ Task Deploy -depends BuildHelp {
 	}
 	Push-Location $PSScriptRoot
 	Invoke-PSDeploy
+	Pop-Location
+}
+
+Task Test -depends BuildDebug {
+    Import-Module "$ModuleOutdir/$ModuleVersion/Cofl.Util.psd1" -Force
+    Push-Location $PSScriptRoot
+	Invoke-Pester -Verbose:$VerbosePreference
 	Pop-Location
 }

@@ -4,9 +4,24 @@
         {
             "label": "Test",
             "type": "shell",
-            "command": "./.vscode/test.ps1",
+            "command": "./build.ps1 -Task Test",
             "group": {
                 "kind": "test",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": false,
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            }
+        },
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "./build.ps1 -Task Build",
+            "group": {
+                "kind": "build",
                 "isDefault": true
             },
             "presentation": {
