@@ -134,12 +134,7 @@ namespace Cofl.Util
             return 1;
         }
         #endregion
-
-        private void WriteHost(string s)
-        {
-            WriteInformation(s, new string[0]);
-        }
-
+        
         protected override void ProcessRecord()
         {
             Queue.Clear();
