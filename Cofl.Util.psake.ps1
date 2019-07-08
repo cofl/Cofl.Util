@@ -1,5 +1,7 @@
 #Requires -Modules PSake
 
+[CmdletBinding()] PARAM ()
+
 [string]$DotNet = Get-Command 'dotnet.exe' -CommandType Application -ErrorAction Stop | Select-Object -ExpandProperty Source
 
 [string]$PowerShellSrcRoot = "$PSScriptRoot/src/Cofl.Util.PowerShell"

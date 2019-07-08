@@ -2,6 +2,8 @@
 
 using namespace System.IO
 
+[CmdletBinding()] PARAM ()
+
 [string]$ModuleVersion = (Import-PowerShellDataFile -Path "$PSScriptRoot/../src/Cofl.Util.PowerShell/Cofl.Util.psd1").ModuleVersion
 if(!(Get-Module -Name Cofl.Util -ErrorAction SilentlyContinue | Where-Object Version -EQ $ModuleVersion))
 {
@@ -12,8 +14,6 @@ if(!(Get-Command -Name 'Get-FilteredChildItem' -ErrorAction SilentlyContinue | W
 {
     throw "Get-FilteredChildItem is not available."
 }
-
-Get-Command -Name 'Get-FilteredChildItem' | Out-String | Write-Host
 
 [string]$DirectorySeparator = [Path]::DirectorySeparatorChar
 [string]$TempDirectory = "$PSScriptRoot${DirectorySeparator}temp"
@@ -53,7 +53,7 @@ Describe 'Get-FilteredChildItem' {
             New-Item -ItemType File -Name 'test2'
         }
 
-        Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -Be 'test1', 'test2'
+        Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Verbose:$VerbosePreference | Should -Be 'test1', 'test2'
     }
 
     It 'Does not exclude any files if the ignore file is empty, except the ignore file.' {

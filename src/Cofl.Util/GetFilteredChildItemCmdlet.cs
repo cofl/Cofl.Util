@@ -135,19 +135,25 @@ namespace Cofl.Util
         }
         #endregion
 
+        private void WriteHost(string s)
+        {
+            WriteInformation(s, new string[0]);
+        }
+
         protected override void ProcessRecord()
         {
             Queue.Clear();
             IgnoreRules.Clear();
             IgnoreRulePerDirectoryCounts.Clear();
             DirectoryHasValidChildren.Clear();
-
             Queue.AddFirst(new DirectoryInfo(Path.FullName.TrimEnd('/', '\\')));
+            
             uint ignoreRuleCount = 0;
             uint currentDepth = 0;
             var basePath = Regex.Escape(Queue.First.Value.FullName.Replace('\\', '/'));
-            foreach(var pattern in IgnorePattern)
-                ignoreRuleCount += AddPatternRule(basePath, pattern);
+            if(null != IgnorePattern)
+                foreach(var pattern in IgnorePattern)
+                    ignoreRuleCount += AddPatternRule(basePath, pattern);
             while(Queue.Count > 0)
             {
                 var nextNode = Queue.First;
@@ -165,7 +171,7 @@ namespace Cofl.Util
                     Queue.RemoveFirst();
                     currentDepth -= 1;
 
-                    if(DirectoryHasValidChildren[top.FullName])
+                    if(DirectoryHasValidChildren.ContainsKey(top.FullName))
                     {
                         // If directories are being output, push them onto a stack.
                         // Directories are re-encountered in reverse order, so they
@@ -256,7 +262,7 @@ namespace Cofl.Util
                     Output:
                     if(isDirectory)
                     {
-                        if(currentDepth < Depth)
+                        if(currentDepth <= Depth)
                             Queue.AddBefore(nextNode, (DirectoryInfo) item);
                     } else if(Directory)
                     {
@@ -268,11 +274,10 @@ namespace Cofl.Util
 
                     Continue:;
                 }
-
-                // If there are directories to output, output them in the right order.
-                while(OutputDirectories.Count > 0 )
-                    WriteObject(OutputDirectories.Pop());
             }
+            // If there are directories to output, output them in the right order.
+            while(OutputDirectories.Count > 0)
+                WriteObject(OutputDirectories.Pop());
         }
     }
 }
