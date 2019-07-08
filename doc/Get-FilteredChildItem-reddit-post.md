@@ -8,9 +8,9 @@ There are a couple of ways that this sort of exclusion when deploying could be d
 2. Trickery with Linux commands or screwing around with Git and ignore files.
 3. Actually that last one sounds useful, but how 'bout we keep it all in the PowerShell world?
 
-And so, `Get-FilteredChildItem` was created. `Get-FilteredChildItem` emulates the functionality of [`.gitignore`](https://git-scm.com/docs/gitignore) files to filter out files and directories in a large hierarchy, using ordered pattern definitions declared in flat files.
+And so, `Get-FilteredChildItem` was created. `Get-FilteredChildItem` is a C# Cmdlet emulates the functionality of [`.gitignore`](https://git-scm.com/docs/gitignore) files to filter out files and directories in a large hierarchy, using ordered pattern definitions declared in flat files.
 
-Below follows a neatly formatted version of the script, split up for easy reading and less scrolling to the side. The full version is available from [GitHub](https://gist.github.com/cofl/52816571c805161c75ac44dfc8634a93), alongside its Pester tests.
+Below follows a neatly formatted version of the script, split up for easy reading and less scrolling to the side. The full version is available from [GitHub](https://github.com/cofl/Cofl.Util/blob/master/src/Cofl.Util/GetFilteredChildItemCmdlet.cs) as part of Cofl.Util, alongside [its Pester tests](https://github.com/cofl/Cofl.Util/blob/master/tests/Get-FilteredChildItem.Tests.ps1).
 
 ---
 
