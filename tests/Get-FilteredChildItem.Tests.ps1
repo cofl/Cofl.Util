@@ -6,7 +6,7 @@ using namespace System.IO
 [string]$TempDirectory = "$PSScriptRoot${DirectorySeparator}temp"
 [string]$IgnoreFileName = '.ignore'
 
-. "$PSScriptRoot/../src/Public/Get-FilteredChildItem.ps1"
+. "$PSScriptRoot/../src/Cofl.Util.PowerShell/Public/Get-FilteredChildItem.ps1"
 
 function Set-Hidden {
     PARAM (
