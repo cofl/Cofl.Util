@@ -6,47 +6,132 @@ using IOPath = System.IO.Path;
 
 namespace Cofl.Util
 {
+    /// <summary>Enumerates files using .gitignore-like flat-file filters.</summary>
+    /// <remarks>
+    /// <para>
+    ///    Get-FilteredChildItem uses flat-file filters to enumerate files in directory hierarchies similar to
+    ///    .gitignore files. A best-effort attempt is made to be compatible with the syntax of .gitignore files,
+    ///    which can be read online [here](https://git-scm.com/docs/gitignore#_pattern_format).
+    /// </para>
+    /// <para>
+    ///    The use of Unix directory separators (/) is mandatory in patterns.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    ///   <code>PS C:\> Get-FilteredChildItem -Path $Path -IgnoreFileName .gitignore</code>
+    ///   <para>Lists files under the directory $Path that aren't excluded by patterns declared in files with the name .gitignore.</para>
+    /// </example>
+    /// <example>
+    ///   <code>PS C:\> Get-FilteredChildItem -Path $Path -IgnorePattern 'pattern1', 'pattern2', 'etc'</code>
+    ///   <para>Lists files under the directory $Path that aren't excluded by the patterns passed to the parameter IgnorePattern.</para>
+    /// </example>
+    /// <example>
+    ///   <code>PS C:\> Get-FilteredChildItem -Path $Path -IgnoreFileName .gitignore -Ignored</code>
+    ///   <para>Lists files under the directory $Path that are excluded by patterns declared in files with the name .gitignore.</para>
+    /// </example>
+    /// <example>
+    ///   <code>PS C:\> Get-FilteredChildItem -Path $Path -IgnoreFileName .gitignore -Hidden</code>
+    ///   <para>Lists only hidden files under the directory $Path that aren't excluded by patterns declared in files with the name .gitignore.</para>
+    /// </example>
+    /// <example>
+    ///   <code>PS C:\> Get-FilteredChildItem -Path $Path -IgnoreFileName .gitignore -Force</code>
+    ///   <para>
+    ///      Lists both hidden and non-hidden files under the directory $Path that aren't excluded by patterns declared in files
+    ///      with the name .gitignore.
+    ///    </para>
+    /// </example>
+    /// <example>
+    ///   <code>PS C:\> Get-FilteredChildItem -Path $Path -IgnoreFileName .gitignore -Directory</code>
+    ///   <para>
+    ///      Lists directories under the directory $Path that contain files that aren't excluded by patterns declared in files
+    ///      with the name .gitignore.
+    ///   </para>
+    /// </example>
+    /// <example>
+    ///   <code>PS C:\> Get-FilteredChildItem -Path $Path -IgnoreFileName .gitignore -Depth 1</code>
+    ///   <para>
+    ///      Lists files under the directory $Path that aren't excluded by patterns declared in files with the name .gitignore,
+    ///      up to a maximum directory depth of 1 (the enumeration will include the contents of the immediate subdirectories of
+    ///      the directory $Path).
+    ///   </para>
+    /// </example>
+    /// <seealso href="https://git-scm.com/docs/gitignore#_pattern_format" />
     [Cmdlet(VerbsCommon.Get, "FilteredChildItem", DefaultParameterSetName = nameof(GetFilteredChildItemCmdlet.ParameterSets.Default))]
+    [OutputType(typeof(FileInfo), typeof(DirectoryInfo))]
     public sealed class GetFilteredChildItemCmdlet : Cmdlet
     {
+        #region Parameters
         private enum ParameterSets
         {
             Default,
             Directory
         }
 
+        /// <summary>
+        /// The path(s) to list from. Must be a directory. Accepts pipeline input.
+        /// </summary>
         [Parameter(Mandatory = true, ValueFromPipeline = true, ValueFromPipelineByPropertyName = true, Position = 0)]
         [Alias("LiteralPath", "PSPath")]
         public DirectoryInfo[] Path { get; set; }
 
+        /// <summary>
+        /// The name of files that contain pattern rule definitions.
+        /// </summary>
         [Parameter()]
         [ValidateNotNullOrEmpty]
         [Alias("ifn")]
         public string IgnoreFileName { get; set; }
 
+        /// <summary>
+        /// Additional pattern definitions that are applied as if they were defined at the
+        /// top of a pattern rule definition file in the directory defined in Path.
+        /// </summary>
         [Parameter()]
         public string[] IgnorePattern { get; set; }
 
+        /// <summary>
+        /// <para>Include pattern rule definition files in the output unless they themselves are ignored.</para>
+        /// <para>The default behavior is that they are not included in the output.</para>
+        /// </summary>
         [Parameter(ParameterSetName = nameof(ParameterSets.Default))]
         public SwitchParameter IncludeIgnoreFiles { get; set; }
 
+        /// <summary>
+        /// Emit the names of directories that are ancestors of files that would be output
+        /// by this cmdlet.
+        /// </summary>
         [Parameter(ParameterSetName = nameof(ParameterSets.Directory))]
         [Alias("d", "ad")]
         public SwitchParameter Directory { get; set; }
 
+        /// <summary>
+        /// <para>Determines the number of subdirectory levels that are included in the recursion.</para>
+        /// <para>The default is near-infinite depth (UInt32.MaxValue).</para>
+        /// </summary>
         [Parameter()]
         public uint Depth { get; set; } = uint.MaxValue;
 
+        /// <summary>
+        /// Gets only hidden files or directories. By default, Get-FilteredChildItem gets only
+        /// non-hidden items, but you can use the Force parameter to include hidden items in
+        /// the results.
+        /// </summary>
         [Parameter()]
         [Alias("ah")]
         public SwitchParameter Hidden { get; set; }
 
+        /// <summary>
+        /// Invert all rules and only output files or directories that would have been ignored.
+        /// </summary>
         [Parameter()]
         public SwitchParameter Force { get; set; }
 
+        /// <summary>
+        /// Invert all rules and only output files or directories that would have been ignored.
+        /// </summary>
         [Parameter()]
         public SwitchParameter Ignored { get; set; }
-
+        #endregion
         #region Variables
         // Match any line that is empty, whitespace, or where the first non-whitespace character is #
         private static Regex CommentLine = new Regex(@"^\s*(?:#.*)?$");
@@ -137,13 +222,15 @@ namespace Cofl.Util
         
         protected override void ProcessRecord()
         {
-            Queue.Clear();
-            IgnoreRules.Clear();
-            IgnoreRulePerDirectoryCounts.Clear();
-            DirectoryHasValidChildren.Clear();
-
             foreach(var path in Path)
             {
+                // clean up for the next run
+                Queue.Clear();
+                IgnoreRules.Clear();
+                IgnoreRulePerDirectoryCounts.Clear();
+                DirectoryHasValidChildren.Clear();
+                
+                // add the next item and begin.
                 Queue.AddFirst(new DirectoryInfo(path.FullName.TrimEnd('/', '\\')));
                 
                 uint ignoreRuleCount = 0;
