@@ -139,6 +139,27 @@ Describe 'Get-FilteredChildItem' {
         Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Ignored | Select-Object -ExpandProperty FullName | Should -Be "${TempDirectory}${DirectorySeparator}potato", "${TempDirectory}${DirectorySeparator}level1${DirectorySeparator}level2${DirectorySeparator}potato"
     }
 
+    It 'Accepts multiple directories' {
+        In $TempDirectory {
+            In (New-Item -ItemType Directory -Name 'test1') {
+                New-Item -ItemType File -Name 'test'
+                New-Item -ItemType File -Name $IgnoreFileName -Value 'test'
+                In (New-Item -ItemType Directory -Name 'inner') {
+                    New-Item -ItemType File -Name 'test'
+                    New-Item -ItemType File -Name 'potato'
+                }
+                In (New-Item -ItemType Directory -Name 'inner-2') {
+                    New-Item -ItemType File -Name 'test'
+                }
+            }
+            In (New-Item -ItemType Directory -Name 'test2') {
+                New-Item -ItemType File -Name 'test'
+            }
+        }
+
+        Get-FilteredChildItem -Path "$TempDirectory/test1", "$TempDirectory/test2" -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be "${TempDirectory}${DirectorySeparator}test1${DirectorySeparator}inner${DirectorySeparator}potato", "${TempDirectory}${DirectorySeparator}test2${DirectorySeparator}test"
+    }
+
     Context 'Excludes one file' {
         It 'Excludes one file' {
             In $TempDirectory {

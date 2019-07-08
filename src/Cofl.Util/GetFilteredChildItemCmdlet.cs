@@ -17,7 +17,7 @@ namespace Cofl.Util
 
         [Parameter(Mandatory = true, ValueFromPipeline = true, ValueFromPipelineByPropertyName = true, Position = 0)]
         [Alias("LiteralPath", "PSPath")]
-        public DirectoryInfo Path { get; set; }
+        public DirectoryInfo[] Path { get; set; }
 
         [Parameter()]
         [ValidateNotNullOrEmpty]
@@ -141,138 +141,142 @@ namespace Cofl.Util
             IgnoreRules.Clear();
             IgnoreRulePerDirectoryCounts.Clear();
             DirectoryHasValidChildren.Clear();
-            Queue.AddFirst(new DirectoryInfo(Path.FullName.TrimEnd('/', '\\')));
-            
-            uint ignoreRuleCount = 0;
-            uint currentDepth = 0;
-            var basePath = Regex.Escape(Queue.First.Value.FullName.Replace('\\', '/'));
-            if(null != IgnorePattern)
-                foreach(var pattern in IgnorePattern)
-                    ignoreRuleCount += AddPatternRule(basePath, pattern);
-            while(Queue.Count > 0)
+
+            foreach(var path in Path)
             {
-                var nextNode = Queue.First;
-                var top = nextNode.Value;
-
-                if(IgnoreRulePerDirectoryCounts.ContainsKey(top.FullName))
-                {
-                    // If this is the second time we've seen this node, remove the rules
-                    // for this directory from the list. Then, remove this directory from
-                    // the map (we won't see it again, so save some memory).
-                    ignoreRuleCount = IgnoreRulePerDirectoryCounts[top.FullName];
-                    for(; ignoreRuleCount > 0; ignoreRuleCount -= 1)
-                        IgnoreRules.RemoveFirst();
-                    IgnoreRulePerDirectoryCounts.Remove(top.FullName);
-                    Queue.RemoveFirst();
-                    currentDepth -= 1;
-
-                    if(DirectoryHasValidChildren.ContainsKey(top.FullName))
-                    {
-                        // If directories are being output, push them onto a stack.
-                        // Directories are re-encountered in reverse order, so they
-                        // need to be re-reversed before being output.
-                        OutputDirectories.Push(top);
-                        DirectoryHasValidChildren[top.Parent.FullName] = true;
-                        DirectoryHasValidChildren.Remove(top.FullName);
-                    }
-                    continue;
-                }
-
-                currentDepth += 1;
+                Queue.AddFirst(new DirectoryInfo(path.FullName.TrimEnd('/', '\\')));
                 
-                // First, look for the ignore file if there is one.
-                if(!string.IsNullOrEmpty(IgnoreFileName))
+                uint ignoreRuleCount = 0;
+                uint currentDepth = 0;
+                var basePath = Regex.Escape(Queue.First.Value.FullName.Replace('\\', '/'));
+                if(null != IgnorePattern)
+                    foreach(var pattern in IgnorePattern)
+                        ignoreRuleCount += AddPatternRule(basePath, pattern);
+                while(Queue.Count > 0)
                 {
-                    var ignoreFile = new FileInfo(IOPath.Combine(top.FullName, IgnoreFileName));
-                    if(ignoreFile.Exists && !ignoreFile.Attributes.HasFlag(FileAttributes.Directory))
-                    {
-                        basePath = Regex.Escape(top.FullName.Replace('\\', '/'));
-                        using(var reader = new StreamReader(ignoreFile.OpenRead()))
-                            // Process each line of the file as a new rule.
-                            for(var line = reader.ReadLine(); null != line; line = reader.ReadLine())
-                                ignoreRuleCount += AddPatternRule(basePath, line);
-                    }
-                }
+                    var nextNode = Queue.First;
+                    var top = nextNode.Value;
 
-                // For each directory in our stack from where we are now up to the root of the search,
-                // we keep track of how many rules were added in that directory. The next time this
-                // directory is at the front of the queue, all its children will have been processed,
-                // so we can remove the rules associated with this directory.
-                IgnoreRulePerDirectoryCounts[top.FullName] = ignoreRuleCount;
-                ignoreRuleCount = 0;
-
-                // Then, for each file or directory...
-                using(var entries = top.EnumerateFileSystemInfos().GetEnumerator())
-                
-                while(entries.MoveNext())
-                {
-                    var item = entries.Current;
-                    var isDirectory = item.Attributes.HasFlag(FileAttributes.Directory);
-                    // If this is an ignore file and those shouldn't be processed, skip over it.
-                    if(!isDirectory && !IncludeIgnoreFiles && item.Name == IgnoreFileName)
-                        continue;
-                    var isHidden = item.Attributes.HasFlag(FileAttributes.Hidden);
-                    // If this is a hidden file and we're not supposed to show those, or this isn't a hidden file
-                    // and $Hidden is true, then skip this item.
-                    // Directories have to be searched always, in case they have hidden children but aren't hidden
-                    // themselves.
-                    if(!isDirectory && !Force && (Hidden != isHidden))
-                        continue;
-                    // If we aren't looking for hidden files at all and this directory is hidden, skip it.
-                    if(isDirectory && isHidden && !(Force || Hidden))
-                        continue;
-                    var itemName = item.FullName.Replace('\\', '/');
-                    // All the directory-only rules match a '/' at the end of the item name;
-                    // the non-directory-only rules also match the '/', but it can be not at the end.
-                    if(isDirectory)
-                        itemName += '/';
-                    // For each rule in reverse order of declaration...
-                    foreach(var rule in IgnoreRules)
+                    if(IgnoreRulePerDirectoryCounts.ContainsKey(top.FullName))
                     {
-                        // Skip directory ignore rules for files.
-                        if(rule.IsDirectoryRule && !isDirectory)
-                            continue;
-                        // This next bit is a bit complicated.
-                        // If the rule matched the item, and we aren't outputting ignored items,
-                        // then if the rule is an allow rule and we aren't outputting ignored items,
-                        // handle the item.
-                        // Otherwise, if the rule didn't match the item and we are outputting ignored
-                        // items, then if the rule is an ignore rule and we're outputting ignored items,
-                        // handle the item.
-                        if(rule.Pattern.IsMatch(itemName) != Ignored.IsPresent)
+                        // If this is the second time we've seen this node, remove the rules
+                        // for this directory from the list. Then, remove this directory from
+                        // the map (we won't see it again, so save some memory).
+                        ignoreRuleCount = IgnoreRulePerDirectoryCounts[top.FullName];
+                        for(; ignoreRuleCount > 0; ignoreRuleCount -= 1)
+                            IgnoreRules.RemoveFirst();
+                        IgnoreRulePerDirectoryCounts.Remove(top.FullName);
+                        Queue.RemoveFirst();
+                        currentDepth -= 1;
+
+                        if(DirectoryHasValidChildren.ContainsKey(top.FullName))
                         {
-                            // If this is an exclusion/allow rule, go to the write-out part.
-                            if(rule.IsExcludeRule != Ignored)
-                                goto Output;
-                            // Otherwise, we're done here, move on to the next item
-                            goto Continue;
+                            // If directories are being output, push them onto a stack.
+                            // Directories are re-encountered in reverse order, so they
+                            // need to be re-reversed before being output.
+                            OutputDirectories.Push(top);
+                            DirectoryHasValidChildren[top.Parent.FullName] = true;
+                            DirectoryHasValidChildren.Remove(top.FullName);
+                        }
+                        continue;
+                    }
+
+                    currentDepth += 1;
+                    
+                    // First, look for the ignore file if there is one.
+                    if(!string.IsNullOrEmpty(IgnoreFileName))
+                    {
+                        var ignoreFile = new FileInfo(IOPath.Combine(top.FullName, IgnoreFileName));
+                        if(ignoreFile.Exists && !ignoreFile.Attributes.HasFlag(FileAttributes.Directory))
+                        {
+                            basePath = Regex.Escape(top.FullName.Replace('\\', '/'));
+                            using(var reader = new StreamReader(ignoreFile.OpenRead()))
+                                // Process each line of the file as a new rule.
+                                for(var line = reader.ReadLine(); null != line; line = reader.ReadLine())
+                                    ignoreRuleCount += AddPatternRule(basePath, line);
                         }
                     }
 
-                    // If no rule ignored the file, and we only want to output ignored files,
-                    // skip to the next item.
-                    if(Ignored)
-                        goto Continue;
+                    // For each directory in our stack from where we are now up to the root of the search,
+                    // we keep track of how many rules were added in that directory. The next time this
+                    // directory is at the front of the queue, all its children will have been processed,
+                    // so we can remove the rules associated with this directory.
+                    IgnoreRulePerDirectoryCounts[top.FullName] = ignoreRuleCount;
+                    ignoreRuleCount = 0;
 
-                    Output:
-                    if(isDirectory)
+                    // Then, for each file or directory...
+                    using(var entries = top.EnumerateFileSystemInfos().GetEnumerator())
+                    
+                    while(entries.MoveNext())
                     {
-                        if(currentDepth <= Depth)
-                            Queue.AddBefore(nextNode, (DirectoryInfo) item);
-                    } else if(Directory)
-                    {
-                        DirectoryHasValidChildren[((FileInfo) item).DirectoryName] = true;
-                    } else
-                    {
-                        WriteObject((FileInfo) item);
+                        var item = entries.Current;
+                        var isDirectory = item.Attributes.HasFlag(FileAttributes.Directory);
+                        // If this is an ignore file and those shouldn't be processed, skip over it.
+                        if(!isDirectory && !IncludeIgnoreFiles && item.Name == IgnoreFileName)
+                            continue;
+                        var isHidden = item.Attributes.HasFlag(FileAttributes.Hidden);
+                        // If this is a hidden file and we're not supposed to show those, or this isn't a hidden file
+                        // and $Hidden is true, then skip this item.
+                        // Directories have to be searched always, in case they have hidden children but aren't hidden
+                        // themselves.
+                        if(!isDirectory && !Force && (Hidden != isHidden))
+                            continue;
+                        // If we aren't looking for hidden files at all and this directory is hidden, skip it.
+                        if(isDirectory && isHidden && !(Force || Hidden))
+                            continue;
+                        var itemName = item.FullName.Replace('\\', '/');
+                        // All the directory-only rules match a '/' at the end of the item name;
+                        // the non-directory-only rules also match the '/', but it can be not at the end.
+                        if(isDirectory)
+                            itemName += '/';
+                        // For each rule in reverse order of declaration...
+                        foreach(var rule in IgnoreRules)
+                        {
+                            // Skip directory ignore rules for files.
+                            if(rule.IsDirectoryRule && !isDirectory)
+                                continue;
+                            // This next bit is a bit complicated.
+                            // If the rule matched the item, and we aren't outputting ignored items,
+                            // then if the rule is an allow rule and we aren't outputting ignored items,
+                            // handle the item.
+                            // Otherwise, if the rule didn't match the item and we are outputting ignored
+                            // items, then if the rule is an ignore rule and we're outputting ignored items,
+                            // handle the item.
+                            if(rule.Pattern.IsMatch(itemName) != Ignored.IsPresent)
+                            {
+                                // If this is an exclusion/allow rule, go to the write-out part.
+                                if(rule.IsExcludeRule != Ignored)
+                                    goto Output;
+                                // Otherwise, we're done here, move on to the next item
+                                goto Continue;
+                            }
+                        }
+
+                        // If no rule ignored the file, and we only want to output ignored files,
+                        // skip to the next item.
+                        if(Ignored)
+                            goto Continue;
+
+                        Output:
+                        if(isDirectory)
+                        {
+                            if(currentDepth <= Depth)
+                                Queue.AddBefore(nextNode, (DirectoryInfo) item);
+                        } else if(Directory)
+                        {
+                            DirectoryHasValidChildren[((FileInfo) item).DirectoryName] = true;
+                        } else
+                        {
+                            WriteObject((FileInfo) item);
+                        }
+
+                        Continue:;
                     }
-
-                    Continue:;
                 }
+                // If there are directories to output, output them in the right order.
+                while(OutputDirectories.Count > 0)
+                    WriteObject(OutputDirectories.Pop());
             }
-            // If there are directories to output, output them in the right order.
-            while(OutputDirectories.Count > 0)
-                WriteObject(OutputDirectories.Pop());
         }
     }
 }
