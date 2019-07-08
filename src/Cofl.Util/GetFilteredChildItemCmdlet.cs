@@ -72,7 +72,7 @@ namespace Cofl.Util
         /// </summary>
         [Parameter(Mandatory = true, ValueFromPipeline = true, ValueFromPipelineByPropertyName = true, Position = 0)]
         [Alias("LiteralPath", "PSPath")]
-        public DirectoryInfo[] Path { get; set; }
+        public FileInfo[] Path { get; set; }
 
         /// <summary>
         /// The name of files that contain pattern rule definitions.
@@ -146,11 +146,11 @@ namespace Cofl.Util
         private static Regex UnescapePatternCharacters = new Regex(@"^\\(?=[\[\\\*\?])");
         
         // Match glob patterns and everything that isn't one
-        private static Regex GlobPatterns = new Regex(string.Join("|", $@"(?<!\\)\[(?<{nameof(MatchGroups.Set)}>[^/]+)\]",
-                                                                $@"(?<{nameof(MatchGroups.Glob)}>/\*\*)",
-                                                                $@"(?<{nameof(MatchGroups.Star)}>(?<!\\)\*)",
-                                                                $@"(?<{nameof(MatchGroups.Any)}>(?<!\\)\?)",
-                                                                $@"(?<{nameof(MatchGroups.Text)}>(?:[^/?*[]|(?<=\\)[?*[])+)"));
+        private static Regex GlobPatterns = new Regex(string.Join("|", $@"(?<!\\)\[(?<{SetGroup}>[^/]+)\]",
+                                                                $@"(?<{GlobGroup}>/\*\*)",
+                                                                $@"(?<{StarGroup}>(?<!\\)\*)",
+                                                                $@"(?<{AnyGroup}>(?<!\\)\?)",
+                                                                $@"(?<{TextGroup}>(?:[^/?*[]|(?<=\\)[?*[])+)"));
         
         private struct IgnoreRule
         {
@@ -174,29 +174,26 @@ namespace Cofl.Util
         // added ignore rules are popped from the above list.
         private Dictionary<string, uint> IgnoreRulePerDirectoryCounts = new Dictionary<string, uint>();
 
-        private enum MatchGroups
-        {
-            Set,
-            Glob,
-            Star,
-            Any,
-            Text
-        }
+        private const string SetGroup = "Set";
+        private const string GlobGroup = "Glob";
+        private const string StarGroup = "Star";
+        private const string AnyGroup = "Any";
+        private const string TextGroup = "Text";
 
         /// <summary>Match evaluator used to convert glob patterns/everything else into proper regex strings</summary>
         private static string GlobPatternEvaluator(Match match)
         {
             // In this delegate, we replace the various glob patterns with regex patterns, and escape all other text (except /).
-            if(match.Groups[nameof(MatchGroups.Text)].Success)
-                return Regex.Escape(UnescapePatternCharacters.Replace(match.Groups[nameof(MatchGroups.Text)].Value, ""));
-            if(match.Groups[nameof(MatchGroups.Star)].Success)
+            if(match.Groups[TextGroup].Success)
+                return Regex.Escape(UnescapePatternCharacters.Replace(match.Groups[TextGroup].Value, ""));
+            if(match.Groups[StarGroup].Success)
                 return "[^/]*";
-            if(match.Groups[nameof(MatchGroups.Glob)].Success)
+            if(match.Groups[GlobGroup].Success)
                 return "(/.*)?";
-            if(match.Groups[nameof(MatchGroups.Any)].Success)
+            if(match.Groups[AnyGroup].Success)
                 return ".";
             // else MatchGroups.Set
-            var escaped = Regex.Escape(match.Groups[nameof(MatchGroups.Set)].Value);
+            var escaped = Regex.Escape(match.Groups[SetGroup].Value);
             return escaped[0] == '!' ? $"[^{escaped.Substring(1)}]" : $"[{escaped}]";
         }
 
@@ -224,21 +221,30 @@ namespace Cofl.Util
         {
             foreach(var path in Path)
             {
-                // clean up for the next run
-                Queue.Clear();
                 IgnoreRules.Clear();
+                // If the current path is a file, handle it in a special way.
+                if(!path.Attributes.HasFlag(FileAttributes.Directory))
+                {
+                    // skip out early if the file is an ignore file and those aren't included.
+                    if(path.Name == IgnoreFileName && !IncludeIgnoreFiles)
+                        continue;
+                    AddIgnorePatterns(((FileInfo) path).DirectoryName.Replace('\\', '/'));
+                    ProcessFileSystemItem(path, 0, null);
+
+                    // then, skip ahead to write out any directories for this item, and continue.
+                    goto WriteDirectories;
+                }
+
+                // otherwise, clean up for the next run
+                Queue.Clear();
                 IgnoreRulePerDirectoryCounts.Clear();
                 DirectoryHasValidChildren.Clear();
                 
                 // add the next item and begin.
                 Queue.AddFirst(new DirectoryInfo(path.FullName.TrimEnd('/', '\\')));
                 
-                uint ignoreRuleCount = 0;
                 uint currentDepth = 0;
-                var basePath = Regex.Escape(Queue.First.Value.FullName.Replace('\\', '/'));
-                if(null != IgnorePattern)
-                    foreach(var pattern in IgnorePattern)
-                        ignoreRuleCount += AddPatternRule(basePath, pattern);
+                var ignoreRuleCount = AddIgnorePatterns(Regex.Escape(Queue.First.Value.FullName.Replace('\\', '/')));;
                 while(Queue.Count > 0)
                 {
                     var nextNode = Queue.First;
@@ -276,7 +282,7 @@ namespace Cofl.Util
                         var ignoreFile = new FileInfo(IOPath.Combine(top.FullName, IgnoreFileName));
                         if(ignoreFile.Exists && !ignoreFile.Attributes.HasFlag(FileAttributes.Directory))
                         {
-                            basePath = Regex.Escape(top.FullName.Replace('\\', '/'));
+                            var basePath = Regex.Escape(top.FullName.Replace('\\', '/'));
                             using(var reader = new StreamReader(ignoreFile.OpenRead()))
                                 // Process each line of the file as a new rule.
                                 for(var line = reader.ReadLine(); null != line; line = reader.ReadLine())
@@ -293,76 +299,86 @@ namespace Cofl.Util
 
                     // Then, for each file or directory...
                     using(var entries = top.EnumerateFileSystemInfos().GetEnumerator())
-                    
                     while(entries.MoveNext())
-                    {
-                        var item = entries.Current;
-                        var isDirectory = item.Attributes.HasFlag(FileAttributes.Directory);
-                        // If this is an ignore file and those shouldn't be processed, skip over it.
-                        if(!isDirectory && !IncludeIgnoreFiles && item.Name == IgnoreFileName)
-                            continue;
-                        var isHidden = item.Attributes.HasFlag(FileAttributes.Hidden);
-                        // If this is a hidden file and we're not supposed to show those, or this isn't a hidden file
-                        // and $Hidden is true, then skip this item.
-                        // Directories have to be searched always, in case they have hidden children but aren't hidden
-                        // themselves.
-                        if(!isDirectory && !Force && (Hidden != isHidden))
-                            continue;
-                        // If we aren't looking for hidden files at all and this directory is hidden, skip it.
-                        if(isDirectory && isHidden && !(Force || Hidden))
-                            continue;
-                        var itemName = item.FullName.Replace('\\', '/');
-                        // All the directory-only rules match a '/' at the end of the item name;
-                        // the non-directory-only rules also match the '/', but it can be not at the end.
-                        if(isDirectory)
-                            itemName += '/';
-                        // For each rule in reverse order of declaration...
-                        foreach(var rule in IgnoreRules)
-                        {
-                            // Skip directory ignore rules for files.
-                            if(rule.IsDirectoryRule && !isDirectory)
-                                continue;
-                            // This next bit is a bit complicated.
-                            // If the rule matched the item, and we aren't outputting ignored items,
-                            // then if the rule is an allow rule and we aren't outputting ignored items,
-                            // handle the item.
-                            // Otherwise, if the rule didn't match the item and we are outputting ignored
-                            // items, then if the rule is an ignore rule and we're outputting ignored items,
-                            // handle the item.
-                            if(rule.Pattern.IsMatch(itemName) != Ignored.IsPresent)
-                            {
-                                // If this is an exclusion/allow rule, go to the write-out part.
-                                if(rule.IsExcludeRule != Ignored)
-                                    goto Output;
-                                // Otherwise, we're done here, move on to the next item
-                                goto Continue;
-                            }
-                        }
-
-                        // If no rule ignored the file, and we only want to output ignored files,
-                        // skip to the next item.
-                        if(Ignored)
-                            goto Continue;
-
-                        Output:
-                        if(isDirectory)
-                        {
-                            if(currentDepth <= Depth)
-                                Queue.AddBefore(nextNode, (DirectoryInfo) item);
-                        } else if(Directory)
-                        {
-                            DirectoryHasValidChildren[((FileInfo) item).DirectoryName] = true;
-                        } else
-                        {
-                            WriteObject((FileInfo) item);
-                        }
-
-                        Continue:;
-                    }
+                        ProcessFileSystemItem(entries.Current, currentDepth, nextNode);
                 }
+
+                WriteDirectories:
                 // If there are directories to output, output them in the right order.
                 while(OutputDirectories.Count > 0)
                     WriteObject(OutputDirectories.Pop());
+            }
+        }
+
+        private uint AddIgnorePatterns(string basePath)
+        {
+            uint counter = 0;
+            if(IgnorePattern != null)
+                foreach(var pattern in IgnorePattern)
+                    counter += AddPatternRule(basePath, pattern);
+            return counter;
+        }
+
+        private void ProcessFileSystemItem(FileSystemInfo item, uint currentDepth, LinkedListNode<DirectoryInfo> nextNode)
+        {
+            var isDirectory = item.Attributes.HasFlag(FileAttributes.Directory);
+            // If this is an ignore file and those shouldn't be processed, skip over it.
+            if(!isDirectory && !IncludeIgnoreFiles && item.Name == IgnoreFileName)
+                return;
+            var isHidden = item.Attributes.HasFlag(FileAttributes.Hidden);
+            // If this is a hidden file and we're not supposed to show those, or this isn't a hidden file
+            // and $Hidden is true, then skip this item.
+            // Directories have to be searched always, in case they have hidden children but aren't hidden
+            // themselves.
+            if(!isDirectory && !Force && (Hidden != isHidden))
+                return;
+            // If we aren't looking for hidden files at all and this directory is hidden, skip it.
+            if(isDirectory && isHidden && !(Force || Hidden))
+                return;
+            var itemName = item.FullName.Replace('\\', '/');
+            // All the directory-only rules match a '/' at the end of the item name;
+            // the non-directory-only rules also match the '/', but it can be not at the end.
+            if(isDirectory)
+                itemName += '/';
+            // For each rule in reverse order of declaration...
+            foreach(var rule in IgnoreRules)
+            {
+                // Skip directory ignore rules for files.
+                if(rule.IsDirectoryRule && !isDirectory)
+                    continue;
+                // This next bit is a bit complicated.
+                // If the rule matched the item, and we aren't outputting ignored items,
+                // then if the rule is an allow rule and we aren't outputting ignored items,
+                // handle the item.
+                // Otherwise, if the rule didn't match the item and we are outputting ignored
+                // items, then if the rule is an ignore rule and we're outputting ignored items,
+                // handle the item.
+                if(rule.Pattern.IsMatch(itemName) != Ignored.IsPresent)
+                {
+                    // If this is an exclusion/allow rule, go to the write-out part.
+                    if(rule.IsExcludeRule != Ignored)
+                        goto Output;
+                    // Otherwise, we're done here
+                    return;
+                }
+            }
+
+            // If no rule ignored the file, and we only want to output ignored files,
+            // skip to the next item.
+            if(Ignored)
+                return;
+
+            Output:
+            if(isDirectory)
+            {
+                if(currentDepth <= Depth)
+                    Queue.AddBefore(nextNode, (DirectoryInfo) item);
+            } else if(Directory)
+            {
+                DirectoryHasValidChildren[((FileInfo) item).DirectoryName] = true;
+            } else
+            {
+                WriteObject((FileInfo) item);
             }
         }
     }

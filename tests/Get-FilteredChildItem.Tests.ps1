@@ -580,4 +580,76 @@ Describe 'Get-FilteredChildItem' {
             Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Hidden -Force | Should -Be 'not-me', 'or-me'
         }
     }
+
+    Context 'Files' {
+        It 'Enumerates files except the ignore file' {
+            In $TempDirectory {
+                New-Item -ItemType File -Name 'test'
+                New-Item -ItemType File -Name 'test1'
+                New-Item -ItemType File -Name $IgnoreFileName
+            }
+
+            Get-ChildItem -Path $TempDirectory | Get-FilteredChildItem -IgnoreFileName $IgnoreFileName | Should -Be 'test', 'test1'
+        }
+
+        It 'Enumerates files including the ignore file' {
+            In $TempDirectory {
+                New-Item -ItemType File -Name 'test'
+                New-Item -ItemType File -Name 'test1'
+                New-Item -ItemType File -Name $IgnoreFileName -Value 'test'
+            }
+
+            Get-ChildItem -Path $TempDirectory | Get-FilteredChildItem -IgnoreFileName $IgnoreFileName -IncludeIgnoreFiles | Should -Be @($IgnoreFileName, 'test', 'test1' | Sort-Object)
+        }
+
+        It 'Ignores Hidden files' {
+            In $TempDirectory {
+                New-Item -ItemType File -Name 'test'
+                New-Item -ItemType File -Name 'test1' | Set-Hidden
+                New-Item -ItemType File -Name $IgnoreFileName -Value 'test'
+            }
+
+            Get-ChildItem -Path $TempDirectory -Force | Get-FilteredChildItem -IgnoreFileName $IgnoreFileName | Should -Be 'test'
+        }
+
+        It 'Enumerates files and directories' {
+            In $TempDirectory {
+                New-Item -ItemType File -Name 'test'
+                New-Item -ItemType File -Name 'test1'
+                New-Item -ItemType File -Name $IgnoreFileName -Value 'test'
+                In (New-Item -ItemType Directory -Name 'inner') {
+                    New-Item -ItemType File -Name $IgnoreFileName -Value 'potato'
+                    In (New-Item -ItemType Directory -Name 'test') {
+                        New-Item -ItemType File -Name 'potato'
+                    }
+                    In (New-Item -ItemType Directory -Name 'test2') {
+                        New-Item -ItemType File -Name 'test'
+                        New-Item -ItemType File -Name 'potato'
+                    }
+                }
+                In (New-Item -ItemType Directory -Name 'inner2') {
+                    In (New-Item -ItemType Directory -Name 'test') {
+                        New-Item -ItemType File -Name 'potato'
+                    }
+                    In (New-Item -ItemType Directory -Name 'potato') {
+                        New-Item -ItemType File -Name $IgnoreFileName -Value 'test'
+                        New-Item -ItemType File -Name 'test'
+                        New-Item -ItemType File -Name 'ignore-me'
+                    }
+                    New-Item -ItemType File -Name 'test-file'
+                }
+            }
+
+            Get-ChildItem -Path $TempDirectory | Select-Object -ExpandProperty FullName |
+            Get-FilteredChildItem -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName |
+            Should -Be @(
+                "${TempDirectory}${DirectorySeparator}inner${DirectorySeparator}test2${DirectorySeparator}test"
+                "${TempDirectory}${DirectorySeparator}inner2${DirectorySeparator}test-file"
+                "${TempDirectory}${DirectorySeparator}inner2${DirectorySeparator}potato${DirectorySeparator}ignore-me"
+                "${TempDirectory}${DirectorySeparator}inner2${DirectorySeparator}test${DirectorySeparator}potato"
+                "${TempDirectory}${DirectorySeparator}test"
+                "${TempDirectory}${DirectorySeparator}test1"
+            )
+        }
+    }
 }
