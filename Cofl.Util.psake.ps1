@@ -62,7 +62,7 @@ Task Deploy -depends Build {
 		Import-Module PSDeploy
 	}
 	Push-Location $PSScriptRoot
-	Invoke-PSDeploy
+	Invoke-PSDeploy -Path "$PSScriptRoot/Cofl.Util.PSDeploy.ps1"
 	Pop-Location
 }
 

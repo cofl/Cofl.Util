@@ -2,7 +2,7 @@
 
 if(!$env:CoflNugetAPIKey)
 {
-    throw 'Missing API Key!'
+    throw 'Missing API Key in $env:CoflNugetAPIKey!'
     exit 1
 }
 
@@ -10,13 +10,18 @@ if(!$env:CoflNugetAPIKey)
 try
 {
     [string]$ModuleVersion = (Import-PowerShellDataFile -Path "$PSScriptRoot/src/Cofl.Util.PowerShell/Cofl.Util.psd1").ModuleVersion
-    & "$PSScriptRoot/build.ps1" -Task Build
+    [string]$BuildRoot = "$PSScriptRoot/build"
+    [string]$Source = "$BuildRoot/Cofl.Util/$ModuleVersion/"
+    if(!(Test-Path $Source))
+    {
+        & "$PSScriptRoot/build.ps1" -Task Build
+    }
 
     $env:PSModulePath += [System.IO.Path]::PathSeparator + $BuildRoot
 
     Deploy 'Cofl.Util' {
         By PSGalleryModule {
-            FromSource -Source "$PSScriptRoot/build/Cofl.Util/$ModuleVersion/"
+            FromSource -Source $Source
             To -Targets PSGallery
             WithOptions -Options @{
                 ApiKey = $env:CoflNugetAPIKey
