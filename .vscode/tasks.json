@@ -17,7 +17,7 @@
             }
         },
         {
-            "label": "build",
+            "label": "Build",
             "type": "shell",
             "command": "./build.ps1 -Task Build",
             "group": {

@@ -73,7 +73,7 @@ Describe 'Get-FilteredChildItem' {
             New-Item -ItemType File -Name $IgnoreFileName
         }
 
-        Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -IncludeIgnoreFiles | Should -Be (Get-ChildItem -Path $TempDirectory -Force | Select-Object -ExpandProperty Name)
+        Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -IncludeIgnoreFiles | Should -Be ('test1', 'test2', $IgnoreFileName | Sort-Object)
     }
 
     It 'Does not exclude any files if there are no matching files.' {
@@ -136,28 +136,10 @@ Describe 'Get-FilteredChildItem' {
             }
         }
 
-        Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Ignored | Select-Object -ExpandProperty FullName | Should -Be "${TempDirectory}${DirectorySeparator}potato", "${TempDirectory}${DirectorySeparator}level1${DirectorySeparator}level2${DirectorySeparator}potato"
-    }
-
-    It 'Accepts multiple directories' {
-        In $TempDirectory {
-            In (New-Item -ItemType Directory -Name 'test1') {
-                New-Item -ItemType File -Name 'test'
-                New-Item -ItemType File -Name $IgnoreFileName -Value 'test'
-                In (New-Item -ItemType Directory -Name 'inner') {
-                    New-Item -ItemType File -Name 'test'
-                    New-Item -ItemType File -Name 'potato'
-                }
-                In (New-Item -ItemType Directory -Name 'inner-2') {
-                    New-Item -ItemType File -Name 'test'
-                }
-            }
-            In (New-Item -ItemType Directory -Name 'test2') {
-                New-Item -ItemType File -Name 'test'
-            }
-        }
-
-        Get-FilteredChildItem -Path "$TempDirectory/test1", "$TempDirectory/test2" -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be "${TempDirectory}${DirectorySeparator}test1${DirectorySeparator}inner${DirectorySeparator}potato", "${TempDirectory}${DirectorySeparator}test2${DirectorySeparator}test"
+        Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Ignored | Select-Object -ExpandProperty FullName | Should -Be @(
+            "${TempDirectory}${DirectorySeparator}potato"
+            "${TempDirectory}${DirectorySeparator}level1${DirectorySeparator}level2${DirectorySeparator}potato"
+        )
     }
 
     Context 'Excludes one file' {
@@ -202,7 +184,10 @@ Describe 'Get-FilteredChildItem' {
                 }
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be "${TempDirectory}${DirectorySeparator}test1", "${TempDirectory}${DirectorySeparator}test2"
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be @(
+                "${TempDirectory}${DirectorySeparator}test1"
+                "${TempDirectory}${DirectorySeparator}test2"
+            )
         }
 
         It 'Excludes one file in the immediate directory' {
@@ -215,7 +200,10 @@ Describe 'Get-FilteredChildItem' {
                 }
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be "${TempDirectory}${DirectorySeparator}test2", "${TempDirectory}${DirectorySeparator}temp${DirectorySeparator}test1"
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be @(
+                "${TempDirectory}${DirectorySeparator}test2"
+                "${TempDirectory}${DirectorySeparator}temp${DirectorySeparator}test1"
+            )
         }
     }
 
@@ -343,7 +331,11 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName -Value 'test*/**/test'
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be "${TempDirectory}${DirectorySeparator}task${DirectorySeparator}test", "${TempDirectory}${DirectorySeparator}test1${DirectorySeparator}test2${DirectorySeparator}potato", "${TempDirectory}${DirectorySeparator}test1${DirectorySeparator}test3${DirectorySeparator}potato"
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be @(
+                "${TempDirectory}${DirectorySeparator}task${DirectorySeparator}test"
+                "${TempDirectory}${DirectorySeparator}test1${DirectorySeparator}test2${DirectorySeparator}potato"
+                "${TempDirectory}${DirectorySeparator}test1${DirectorySeparator}test3${DirectorySeparator}potato"
+            )
         }
     }
 
@@ -367,7 +359,10 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName -Value 'potato/'
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be "${TempDirectory}${DirectorySeparator}inner${DirectorySeparator}test${DirectorySeparator}potato", "${TempDirectory}${DirectorySeparator}test${DirectorySeparator}potato"
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be @(
+                "${TempDirectory}${DirectorySeparator}inner${DirectorySeparator}test${DirectorySeparator}potato"
+                "${TempDirectory}${DirectorySeparator}test${DirectorySeparator}potato"
+            )
         }
 
         It 'Matches only to a depth of 0' {
@@ -387,7 +382,9 @@ Describe 'Get-FilteredChildItem' {
                 }
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Depth 0 | Select-Object -ExpandProperty FullName | Should -Be "${TempDirectory}${DirectorySeparator}test"
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Depth 0 | Select-Object -ExpandProperty FullName | Should -Be @(
+                "${TempDirectory}${DirectorySeparator}test"
+            )
         }
 
         It 'Matches only to a depth of 1' {
@@ -407,7 +404,11 @@ Describe 'Get-FilteredChildItem' {
                 }
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Depth 1 | Select-Object -ExpandProperty FullName | Should -Be "${TempDirectory}${DirectorySeparator}test", "${TempDirectory}${DirectorySeparator}level1${DirectorySeparator}test", "${TempDirectory}${DirectorySeparator}level1-2${DirectorySeparator}test"
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Depth 1 | Select-Object -ExpandProperty FullName | Should -Be @(
+                "${TempDirectory}${DirectorySeparator}test"
+                "${TempDirectory}${DirectorySeparator}level1${DirectorySeparator}test"
+                "${TempDirectory}${DirectorySeparator}level1-2${DirectorySeparator}test"
+            )
         }
 
         It 'Matches directories that are ancestors of valid files' {
@@ -428,7 +429,26 @@ Describe 'Get-FilteredChildItem' {
                 }
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Directory | Select-Object -ExpandProperty FullName | Should -Be $TempDirectory, "${TempDirectory}${DirectorySeparator}level1", "${TempDirectory}${DirectorySeparator}level1${DirectorySeparator}level2"
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Directory | Select-Object -ExpandProperty FullName | Should -Be @(
+                $TempDirectory
+                "${TempDirectory}${DirectorySeparator}level1"
+                "${TempDirectory}${DirectorySeparator}level1${DirectorySeparator}level2"
+            )
+        }
+
+        It 'Only outputs directories even if including ignore files' {
+            In $TempDirectory {
+                In (New-Item -ItemType Directory -Name 'test-directory') {
+                    New-Item -ItemType File -Name 'test'
+                }
+                New-Item -ItemType File -Name $IgnoreFileName
+            }
+
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Directory -IncludeIgnoreFiles |
+                Select-Object -ExpandProperty FullName | Should -Be @(
+                    $TempDirectory
+                    "${TempDirectory}${DirectorySeparator}test-directory"
+                )
         }
     }
 
@@ -461,7 +481,11 @@ Describe 'Get-FilteredChildItem' {
                 }
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be "${TempDirectory}${DirectorySeparator}not-me", "${TempDirectory}${DirectorySeparator}inner2${DirectorySeparator}test-file", "${TempDirectory}${DirectorySeparator}inner2${DirectorySeparator}test${DirectorySeparator}potato"
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be @(
+                "${TempDirectory}${DirectorySeparator}not-me"
+                "${TempDirectory}${DirectorySeparator}inner2${DirectorySeparator}test-file"
+                "${TempDirectory}${DirectorySeparator}inner2${DirectorySeparator}test${DirectorySeparator}potato"
+            )
         }
     }
 
@@ -498,7 +522,10 @@ Describe 'Get-FilteredChildItem' {
                 }
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be "${TempDirectory}${DirectorySeparator}test.txt", "${TempDirectory}${DirectorySeparator}inner${DirectorySeparator}test.txt"
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be @(
+                "${TempDirectory}${DirectorySeparator}test.txt"
+                "${TempDirectory}${DirectorySeparator}inner${DirectorySeparator}test.txt"
+            )
         }
     }
 
@@ -533,7 +560,10 @@ Describe 'Get-FilteredChildItem' {
                 }
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be "${TempDirectory}${DirectorySeparator}or-me", "${TempDirectory}${DirectorySeparator}test${DirectorySeparator}or-me"
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be @(
+                "${TempDirectory}${DirectorySeparator}or-me"
+                "${TempDirectory}${DirectorySeparator}test${DirectorySeparator}or-me"
+            )
         }
 
         It 'Shows hidden items in non-hidden directories' {
@@ -555,7 +585,11 @@ Describe 'Get-FilteredChildItem' {
                 }
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Hidden | Select-Object -ExpandProperty FullName | Should -Be "${TempDirectory}${DirectorySeparator}not-me", "${TempDirectory}${DirectorySeparator}test${DirectorySeparator}not-me", "${TempDirectory}${DirectorySeparator}test2${DirectorySeparator}not-me"
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Hidden | Select-Object -ExpandProperty FullName | Should -Be @(
+                "${TempDirectory}${DirectorySeparator}not-me"
+                "${TempDirectory}${DirectorySeparator}test${DirectorySeparator}not-me"
+                "${TempDirectory}${DirectorySeparator}test2${DirectorySeparator}not-me"
+            )
         }
 
         It 'Shows all items with -Force' {
@@ -589,7 +623,8 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName
             }
 
-            Get-ChildItem -Path $TempDirectory | Get-FilteredChildItem -IgnoreFileName $IgnoreFileName | Should -Be 'test', 'test1'
+            Get-ChildItem -Path $TempDirectory | Get-FilteredChildItem -IgnoreFileName $IgnoreFileName |
+                Select-Object -ExpandProperty Name | Should -Be 'test', 'test1'
         }
 
         It 'Enumerates files including the ignore file' {
@@ -599,7 +634,8 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName -Value 'test'
             }
 
-            Get-ChildItem -Path $TempDirectory | Get-FilteredChildItem -IgnoreFileName $IgnoreFileName -IncludeIgnoreFiles | Should -Be @($IgnoreFileName, 'test', 'test1' | Sort-Object)
+            Get-ChildItem -Path $TempDirectory | Get-FilteredChildItem -IgnoreFileName $IgnoreFileName -IncludeIgnoreFiles |
+                Select-Object -ExpandProperty Name | Should -Be @($IgnoreFileName, 'test', 'test1' | Sort-Object)
         }
 
         It 'Ignores Hidden files' {
@@ -609,7 +645,8 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName -Value 'test'
             }
 
-            Get-ChildItem -Path $TempDirectory -Force | Get-FilteredChildItem -IgnoreFileName $IgnoreFileName | Should -Be 'test'
+            Get-ChildItem -Path $TempDirectory -Force | Get-FilteredChildItem -IgnoreFileName $IgnoreFileName |
+                Select-Object -ExpandProperty Name | Should -Be 'test'
         }
 
         It 'Enumerates files and directories' {
@@ -640,9 +677,97 @@ Describe 'Get-FilteredChildItem' {
                 }
             }
 
-            Get-ChildItem -Path $TempDirectory | Select-Object -ExpandProperty FullName |
-            Get-FilteredChildItem -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName |
-            Should -Be @(
+            Get-ChildItem -Path $TempDirectory | Get-FilteredChildItem -IgnoreFileName $IgnoreFileName |
+                Select-Object -ExpandProperty FullName | Should -Be @(
+                    "${TempDirectory}${DirectorySeparator}inner${DirectorySeparator}test2${DirectorySeparator}test"
+                    "${TempDirectory}${DirectorySeparator}inner2${DirectorySeparator}test-file"
+                    "${TempDirectory}${DirectorySeparator}inner2${DirectorySeparator}potato${DirectorySeparator}ignore-me"
+                    "${TempDirectory}${DirectorySeparator}inner2${DirectorySeparator}test${DirectorySeparator}potato"
+                    "${TempDirectory}${DirectorySeparator}test"
+                    "${TempDirectory}${DirectorySeparator}test1"
+                )
+        }
+    }
+
+    Context 'Path' {
+        It 'Accepts / at the end' {
+            In $TempDirectory {
+                In (New-Item -ItemType Directory -Name 'inner') {
+                    New-Item -ItemType File -Name 'test'
+                }
+            }
+
+            Get-FilteredChildItem -Path "${TempDirectory}/" | Select-Object -ExpandProperty FullName | Should -Be @(
+                "${TempDirectory}${DirectorySeparator}inner${DirectorySeparator}test"
+            )
+        }
+
+        It 'Accepts no / at the end' {
+            In $TempDirectory {
+                In (New-Item -ItemType Directory -Name 'inner') {
+                    New-Item -ItemType File -Name 'test'
+                }
+            }
+
+            Get-FilteredChildItem -Path "${TempDirectory}" | Select-Object -ExpandProperty FullName | Should -Be @(
+                "${TempDirectory}${DirectorySeparator}inner${DirectorySeparator}test"
+            )
+        }
+
+        It 'Accepts multiple directories' {
+            In $TempDirectory {
+                In (New-Item -ItemType Directory -Name 'test1') {
+                    New-Item -ItemType File -Name 'test'
+                    New-Item -ItemType File -Name $IgnoreFileName -Value 'test'
+                    In (New-Item -ItemType Directory -Name 'inner') {
+                        New-Item -ItemType File -Name 'test'
+                        New-Item -ItemType File -Name 'potato'
+                    }
+                    In (New-Item -ItemType Directory -Name 'inner-2') {
+                        New-Item -ItemType File -Name 'test'
+                    }
+                }
+                In (New-Item -ItemType Directory -Name 'test2') {
+                    New-Item -ItemType File -Name 'test'
+                }
+            }
+
+            Get-FilteredChildItem -Path "$TempDirectory/test1", "$TempDirectory/test2" -IgnoreFileName $IgnoreFileName |
+                Select-Object -ExpandProperty FullName | Should -Be @(
+                    "${TempDirectory}${DirectorySeparator}test1${DirectorySeparator}inner${DirectorySeparator}potato"
+                    "${TempDirectory}${DirectorySeparator}test2${DirectorySeparator}test"
+                )
+        }
+
+        It 'Accepts wildcards for Path' {
+            In $TempDirectory {
+                New-Item -ItemType File -Name 'test'
+                New-Item -ItemType File -Name 'test1'
+                New-Item -ItemType File -Name $IgnoreFileName -Value 'test'
+                In (New-Item -ItemType Directory -Name 'inner') {
+                    New-Item -ItemType File -Name $IgnoreFileName -Value 'potato'
+                    In (New-Item -ItemType Directory -Name 'test') {
+                        New-Item -ItemType File -Name 'potato'
+                    }
+                    In (New-Item -ItemType Directory -Name 'test2') {
+                        New-Item -ItemType File -Name 'test'
+                        New-Item -ItemType File -Name 'potato'
+                    }
+                }
+                In (New-Item -ItemType Directory -Name 'inner2') {
+                    In (New-Item -ItemType Directory -Name 'test') {
+                        New-Item -ItemType File -Name 'potato'
+                    }
+                    In (New-Item -ItemType Directory -Name 'potato') {
+                        New-Item -ItemType File -Name $IgnoreFileName -Value 'test'
+                        New-Item -ItemType File -Name 'test'
+                        New-Item -ItemType File -Name 'ignore-me'
+                    }
+                    New-Item -ItemType File -Name 'test-file'
+                }
+            }
+
+            Get-FilteredChildItem -Path "$TempDirectory/*" -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be @(
                 "${TempDirectory}${DirectorySeparator}inner${DirectorySeparator}test2${DirectorySeparator}test"
                 "${TempDirectory}${DirectorySeparator}inner2${DirectorySeparator}test-file"
                 "${TempDirectory}${DirectorySeparator}inner2${DirectorySeparator}potato${DirectorySeparator}ignore-me"
@@ -650,6 +775,114 @@ Describe 'Get-FilteredChildItem' {
                 "${TempDirectory}${DirectorySeparator}test"
                 "${TempDirectory}${DirectorySeparator}test1"
             )
+        }
+
+        It 'Accepts only wildcards for Path' {
+            In $TempDirectory {
+                $Directory = New-Item -ItemType Directory -Name '[test] inner';
+                [File]::Create("$($Directory.FullName)${DirectorySeparator}test").Dispose()
+                In (New-Item -ItemType Directory -Name 'e inner') {
+                    New-Item -ItemType File -Name 'test'
+                }
+            }
+
+            Get-FilteredChildItem -Path "$TempDirectory/[test] inner" -IgnoreFileName $IgnoreFileName |
+                Select-Object -ExpandProperty FullName | Should -Be @(
+                    "${TempDirectory}${DirectorySeparator}e inner${DirectorySeparator}test"
+                )
+        }
+
+        It 'Searches the current directory if a Path is not provided' {
+            In $TempDirectory {
+                New-Item -ItemType File -Name 'test'
+                New-Item -ItemType File -Name 'test1'
+                New-Item -ItemType File -Name $IgnoreFileName -Value 'test'
+                In (New-Item -ItemType Directory -Name 'inner') {
+                    New-Item -ItemType File -Name 'potato'
+                    In (New-Item -ItemType Directory -Name 'test') {
+                        New-Item -ItemType File -Name 'potato'
+                    }
+                }
+                In (New-Item -ItemType Directory -Name 'inner2') {
+                    In (New-Item -ItemType Directory -Name 'test') {
+                        New-Item -ItemType File -Name 'potato'
+                    }
+                    New-Item -ItemType File -Name 'test-file'
+                }
+            }
+
+            In $TempDirectory {
+                Get-FilteredChildItem -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty FullName | Should -Be @(
+                    "${TempDirectory}${DirectorySeparator}test1"
+                    "${TempDirectory}${DirectorySeparator}inner${DirectorySeparator}potato"
+                    "${TempDirectory}${DirectorySeparator}inner2${DirectorySeparator}test-file"
+                )
+            }
+        }
+
+        It 'Does not accept wildcards for LiteralPath' {
+            In $TempDirectory {
+                $Directory = New-Item -ItemType Directory -Name '[test] inner';
+                [File]::Create("$($Directory.FullName)${DirectorySeparator}test").Dispose()
+                In (New-Item -ItemType Directory -Name 'e inner') {
+                    New-Item -ItemType File -Name 'test'
+                }
+            }
+
+            Get-FilteredChildItem -LiteralPath "$TempDirectory/[test] inner" -IgnoreFileName $IgnoreFileName |
+                Select-Object -ExpandProperty FullName | Should -Be @(
+                    "${TempDirectory}${DirectorySeparator}[test] inner${DirectorySeparator}test"
+                )
+        }
+    }
+
+    Context 'Does nothing' {
+        It 'Does not output if all files are ignored by file' {
+            In $TempDirectory {
+                New-Item -ItemType File -Name $IgnoreFileName -Value '*'
+                New-Item -ItemType File -Name 'test'
+                In (New-Item -ItemType Directory -Name 'inner') {
+                    New-Item -ItemType File -Name 'test'
+                }
+            }
+
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -BeNullOrEmpty
+        }
+
+        It 'Does not output if all files are ignored by argument' {
+            In $TempDirectory {
+                New-Item -ItemType File -Name $IgnoreFileName
+                New-Item -ItemType File -Name 'test'
+                In (New-Item -ItemType Directory -Name 'inner') {
+                    New-Item -ItemType File -Name 'test'
+                }
+            }
+
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -IgnorePattern '*' | Should -BeNullOrEmpty
+        }
+
+        It 'Does not output directories if all files are ignored' {
+            In $TempDirectory {
+                New-Item -ItemType File -Name $IgnoreFileName -Value '*'
+                New-Item -ItemType File -Name 'test'
+                In (New-Item -ItemType Directory -Name 'inner') {
+                    New-Item -ItemType File -Name 'test'
+                }
+            }
+
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Directory | Should -BeNullOrEmpty
+        }
+
+        It 'Does not output directories if all files are ignored and ignore files are included' {
+            In $TempDirectory {
+                New-Item -ItemType File -Name $IgnoreFileName -Value '*'
+                New-Item -ItemType File -Name 'test'
+                In (New-Item -ItemType Directory -Name 'inner') {
+                    New-Item -ItemType File -Name 'test'
+                }
+            }
+
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Directory -IncludeIgnoreFiles | Should -BeNullOrEmpty
         }
     }
 }

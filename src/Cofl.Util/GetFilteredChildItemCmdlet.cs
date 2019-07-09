@@ -3,6 +3,7 @@ using System.IO;
 using System.Management.Automation;
 using System.Text.RegularExpressions;
 using IOPath = System.IO.Path;
+using IODirectory = System.IO.Directory;
 
 namespace Cofl.Util
 {
@@ -58,49 +59,55 @@ namespace Cofl.Util
     /// <seealso href="https://git-scm.com/docs/gitignore#_pattern_format" />
     [Cmdlet(VerbsCommon.Get, "FilteredChildItem", DefaultParameterSetName = nameof(GetFilteredChildItemCmdlet.ParameterSets.Default))]
     [OutputType(typeof(FileInfo), typeof(DirectoryInfo))]
-    public sealed class GetFilteredChildItemCmdlet : Cmdlet
+    public sealed class GetFilteredChildItemCmdlet : PSCmdlet
     {
         #region Parameters
         private enum ParameterSets
         {
             Default,
-            Directory
+            Literal
         }
 
         /// <summary>
-        /// The path(s) to list from. Must be a directory. Accepts pipeline input.
+        /// Specifies a path to one or more locations. Wildcards are permitted. The default location is the current directory (.).
         /// </summary>
-        [Parameter(Mandatory = true, ValueFromPipeline = true, ValueFromPipelineByPropertyName = true, Position = 0)]
-        [Alias("LiteralPath", "PSPath")]
-        public FileInfo[] Path { get; set; }
+        [Parameter(ValueFromPipeline = true, ValueFromPipelineByPropertyName = true, Position = 0, ParameterSetName = nameof(ParameterSets.Default))]
+        [SupportsWildcards]
+        public string[] Path { get; set; } = new[]{ "." };
+
+        /// <summary>
+        /// Specifies a path to one or more locations. Unlike the Path parameter, no characters are interpreted as wildcards.
+        /// </summary>
+        [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, ParameterSetName = nameof(ParameterSets.Literal))]
+        [Alias("PSPath")]
+        public string[] LiteralPath { get; set; }
 
         /// <summary>
         /// The name of files that contain pattern rule definitions.
         /// </summary>
-        [Parameter()]
-        [ValidateNotNullOrEmpty]
-        [Alias("ifn")]
+        [Parameter]
+        [ValidateNotNullOrEmpty][Alias("ifn")]
         public string IgnoreFileName { get; set; }
 
         /// <summary>
         /// Additional pattern definitions that are applied as if they were defined at the
         /// top of a pattern rule definition file in the directory defined in Path.
         /// </summary>
-        [Parameter()]
+        [Parameter]
         public string[] IgnorePattern { get; set; }
 
         /// <summary>
         /// <para>Include pattern rule definition files in the output unless they themselves are ignored.</para>
         /// <para>The default behavior is that they are not included in the output.</para>
         /// </summary>
-        [Parameter(ParameterSetName = nameof(ParameterSets.Default))]
+        [Parameter]
         public SwitchParameter IncludeIgnoreFiles { get; set; }
 
         /// <summary>
         /// Emit the names of directories that are ancestors of files that would be output
         /// by this cmdlet.
         /// </summary>
-        [Parameter(ParameterSetName = nameof(ParameterSets.Directory))]
+        [Parameter]
         [Alias("d", "ad")]
         public SwitchParameter Directory { get; set; }
 
@@ -108,7 +115,7 @@ namespace Cofl.Util
         /// <para>Determines the number of subdirectory levels that are included in the recursion.</para>
         /// <para>The default is near-infinite depth (UInt32.MaxValue).</para>
         /// </summary>
-        [Parameter()]
+        [Parameter]
         public uint Depth { get; set; } = uint.MaxValue;
 
         /// <summary>
@@ -116,20 +123,20 @@ namespace Cofl.Util
         /// non-hidden items, but you can use the Force parameter to include hidden items in
         /// the results.
         /// </summary>
-        [Parameter()]
+        [Parameter]
         [Alias("ah")]
         public SwitchParameter Hidden { get; set; }
 
         /// <summary>
         /// Invert all rules and only output files or directories that would have been ignored.
         /// </summary>
-        [Parameter()]
+        [Parameter]
         public SwitchParameter Force { get; set; }
 
         /// <summary>
         /// Invert all rules and only output files or directories that would have been ignored.
         /// </summary>
-        [Parameter()]
+        [Parameter]
         public SwitchParameter Ignored { get; set; }
         #endregion
         #region Variables
@@ -216,10 +223,55 @@ namespace Cofl.Util
             return 1;
         }
         #endregion
+        #region Utility functions
+        private IEnumerable<FileSystemInfo> ResolvePaths(IEnumerable<string> enumerable, bool literal)
+        {
+            if(null == enumerable)
+                yield break;
+            foreach(var item in enumerable)
+            {
+                if(string.IsNullOrEmpty(item))
+                    continue;
+                if(!literal)
+                {
+                    // GetResolvedProviderPathFromPSPath expands wildcards
+                    var result = GetResolvedProviderPathFromPSPath(item, out var provider);
+                    if(null != result)
+                    {
+                        foreach(var path in result)
+                        {
+                            if(IODirectory.Exists(path))
+                                yield return new DirectoryInfo(path);
+                            else
+                                yield return new FileInfo(path);
+                        }
+                    }
+                } else
+                {
+                    // GetUnresolvedProviderPathFromPSPath, though, does not.
+                    var result = GetUnresolvedProviderPathFromPSPath(item);
+                    if(IODirectory.Exists(result))
+                        yield return new DirectoryInfo(result);
+                    else
+                        yield return new FileInfo(result);
+                }
+            }
+        }
+
+        private uint AddIgnorePatterns(string basePath)
+        {
+            uint counter = 0;
+            if(IgnorePattern != null)
+                foreach(var pattern in IgnorePattern)
+                    counter += AddPatternRule(basePath, pattern);
+            return counter;
+        }
+        #endregion
         
         protected override void ProcessRecord()
         {
-            foreach(var path in Path)
+            var isLiteral = LiteralPath != null && LiteralPath.Length > 0;
+            foreach(var path in ResolvePaths(isLiteral ? LiteralPath : Path, isLiteral))
             {
                 IgnoreRules.Clear();
                 // If the current path is a file, handle it in a special way.
@@ -229,7 +281,7 @@ namespace Cofl.Util
                     if(path.Name == IgnoreFileName && !IncludeIgnoreFiles)
                         continue;
                     AddIgnorePatterns(((FileInfo) path).DirectoryName.Replace('\\', '/'));
-                    ProcessFileSystemItem(path, 0, null);
+                    ProcessFileSystemItem(path);
 
                     // then, skip ahead to write out any directories for this item, and continue.
                     goto WriteDirectories;
@@ -241,7 +293,7 @@ namespace Cofl.Util
                 DirectoryHasValidChildren.Clear();
                 
                 // add the next item and begin.
-                Queue.AddFirst(new DirectoryInfo(path.FullName.TrimEnd('/', '\\')));
+                Queue.AddFirst((DirectoryInfo) path);
                 
                 uint currentDepth = 0;
                 var ignoreRuleCount = AddIgnorePatterns(Regex.Escape(Queue.First.Value.FullName.Replace('\\', '/')));;
@@ -298,9 +350,10 @@ namespace Cofl.Util
                     ignoreRuleCount = 0;
 
                     // Then, for each file or directory...
+                    var skipRemainingFiles = false;
                     using(var entries = top.EnumerateFileSystemInfos().GetEnumerator())
                     while(entries.MoveNext())
-                        ProcessFileSystemItem(entries.Current, currentDepth, nextNode);
+                        skipRemainingFiles |= ProcessFileSystemItem(entries.Current, currentDepth, nextNode, skipRemainingFiles);
                 }
 
                 WriteDirectories:
@@ -310,31 +363,25 @@ namespace Cofl.Util
             }
         }
 
-        private uint AddIgnorePatterns(string basePath)
-        {
-            uint counter = 0;
-            if(IgnorePattern != null)
-                foreach(var pattern in IgnorePattern)
-                    counter += AddPatternRule(basePath, pattern);
-            return counter;
-        }
-
-        private void ProcessFileSystemItem(FileSystemInfo item, uint currentDepth, LinkedListNode<DirectoryInfo> nextNode)
+        private bool ProcessFileSystemItem(FileSystemInfo item, uint currentDepth = 0, LinkedListNode<DirectoryInfo> nextNode = null, bool skipRemainingFiles = false)
         {
             var isDirectory = item.Attributes.HasFlag(FileAttributes.Directory);
+            // If this is a file and those are being skipped right now, skip over it.
+            if(!isDirectory && skipRemainingFiles)
+                return true;
             // If this is an ignore file and those shouldn't be processed, skip over it.
             if(!isDirectory && !IncludeIgnoreFiles && item.Name == IgnoreFileName)
-                return;
+                return false;
             var isHidden = item.Attributes.HasFlag(FileAttributes.Hidden);
             // If this is a hidden file and we're not supposed to show those, or this isn't a hidden file
             // and $Hidden is true, then skip this item.
             // Directories have to be searched always, in case they have hidden children but aren't hidden
             // themselves.
             if(!isDirectory && !Force && (Hidden != isHidden))
-                return;
+                return false;
             // If we aren't looking for hidden files at all and this directory is hidden, skip it.
             if(isDirectory && isHidden && !(Force || Hidden))
-                return;
+                return false;
             var itemName = item.FullName.Replace('\\', '/');
             // All the directory-only rules match a '/' at the end of the item name;
             // the non-directory-only rules also match the '/', but it can be not at the end.
@@ -359,15 +406,20 @@ namespace Cofl.Util
                     if(rule.IsExcludeRule != Ignored)
                         goto Output;
                     // Otherwise, we're done here
-                    return;
+                    return false;
                 }
             }
 
             // If no rule ignored the file, and we only want to output ignored files,
             // skip to the next item.
             if(Ignored)
-                return;
+                return false;
 
+            // Here's the common output-handling code for all cases that need to:
+            // Directories are recursed into if we're supposed to.
+            // Or, if it's a file:
+            //   1. If outputting a directory, mark the directory this file is in as valid.
+            //   2. Or, output the file to the pipeline now.
             Output:
             if(isDirectory)
             {
@@ -376,10 +428,12 @@ namespace Cofl.Util
             } else if(Directory)
             {
                 DirectoryHasValidChildren[((FileInfo) item).DirectoryName] = true;
+                return true;
             } else
             {
                 WriteObject((FileInfo) item);
             }
+            return false;
         }
     }
 }
