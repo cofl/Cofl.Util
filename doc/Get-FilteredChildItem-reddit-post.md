@@ -477,4 +477,4 @@ I also want to give a special thanks to /u/lordicarus, who provided insightful c
 
 If you want to give it a try, it's available either in source on GitHub, or from the PowerShellGallery in the [Cofl.Util](https://www.powershellgallery.com/packages/Cofl.Util/1.2.0) module version 1.2 or higher.
 
-TL;DR: [`Get-FilteredChildItem`](https://github.com/cofl/Cofl.Util/blob/master/src/Cofl.Util/GetFilteredChildItemCmdlet.cs) emulated `.gitignore` files' patterns to arbitrarily match large file hierarchies.
+TL;DR: [`Get-FilteredChildItem`](https://github.com/cofl/Cofl.Util/blob/master/src/Cofl.Util/GetFilteredChildItemCmdlet.cs) emulates `.gitignore` files' patterns to arbitrarily match large file hierarchies.
