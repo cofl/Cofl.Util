@@ -10,7 +10,7 @@ There are a couple of ways that this sort of exclusion when deploying could be d
 
 And so, `Get-FilteredChildItem` was created. `Get-FilteredChildItem` is a C# Cmdlet emulates the functionality of [`.gitignore`](https://git-scm.com/docs/gitignore) files to filter out files and directories in a large hierarchy, using ordered pattern definitions declared in flat files.
 
-Below follows a neatly formatted version of the script, split up for easy reading and less scrolling to the side. The full version is available from [GitHub](https://github.com/cofl/Cofl.Util/blob/master/src/Cofl.Util/GetFilteredChildItemCmdlet.cs) as part of Cofl.Util, alongside [its Pester tests](https://github.com/cofl/Cofl.Util/blob/master/tests/Get-FilteredChildItem.Tests.ps1).
+Below follows a neatly formatted version of the script, split up for easy reading and less scrolling to the side. The full version is available from [GitHub](https://github.com/cofl/Cofl.Util/blob/master/src/Cofl.Util/GetFilteredChildItemCmdlet.cs) as part of Cofl.Util, alongside [its Pester tests](https://github.com/cofl/Cofl.Util/blob/master/tests/Get-FilteredChildItem.Tests.ps1). I've been testing with local files on Windows, but I have confirmed that it works just fine with UNC paths, and also in the PowerShell 7.0 preview.
 
 ---
 
@@ -81,7 +81,7 @@ The two parameter sets this cmdlet supports are *Default* and *Literal*, split a
                 Default,
                 Literal
             }
-    
+
 The `Path` parameter isn't required. In binary cmdlets, parameters are given as [properties](https://docs.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/properties). We can assign our defaults the same way as normal; here, the default is the current location. It is possible to pass in multiple paths, either as an array, or via the pipeline. With `Path`, [wildcards](https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_wildcards?view=powershell-6) like `*` and `?` are processed, so something like `$BaseDir/*/inner` is possible. If a file is given instead of a directory, the only way to filter names is via the `IgnorePattern` parameter, which uses the file's parent directory as the base path.
 
             [Parameter(ValueFromPipeline = true, ValueFromPipelineByPropertyName = true, Position = 0,     ParameterSetName = nameof(ParameterSets.Default))]
@@ -104,12 +104,12 @@ The `IgnoreFileName` parameter is given the name of the files to ignore. If you 
 
             [Parameter]
             public string[] IgnorePattern { get; set; }
-    
+
 By default, ignore files are skipped in the output as if they weren't even there. You can, however, force them to be included (unless a pattern leaves them out) with the `IncludeIgnoreFiles` switch.
 
             [Parameter]
             public SwitchParameter IncludeIgnoreFiles { get; set; }
-    
+
 Of course, some times you don't want the files themselves, but instead the directories that contain them. Providing the `Directory` switch will enable that behavior.
 
             [Parameter]
@@ -127,7 +127,7 @@ The last few parameters are all for limiting or allowing files in other ways: `-
 
             [Parameter]
             public SwitchParameter Force { get; set; }
-    
+
 The last parameter is `Ignored`, which inverts the output behavior: if a file would have been output, it isn't, and if it would have been skipped, it's now output to the pipeline.
 
             [Parameter]
@@ -140,9 +140,9 @@ Finally done with the parameters, but not with the initialization in general. Th
 3. `UnescapeCharacters` is another replacement regex that removes backslashes from the start of the line, and from before any whitespace.
 4. `UnescapePatternCharacters` does the same thing, but for characters that have a special meaning in patterns: `?`, `*`, `\`, and `[`. These are processed later, which is why this regex is separate from the last one.
 5. `GlobPatterns`. The Big One. This regex is used along with `GlobPatternEvaluator` to turn the friendly wildcard patterns from files into nasty regular expressions.
-7. `Queue` keeps track of which directories we still need to visit (or re-visit).
-8. `DirectoryHasValidChildren` and `OutputDirectories` make the `Directory` switch work by tracking which directories need to be output; the second stack is necessary because we can only know what directories are valid *after* visiting all their children, and they're re-visited in *reverse* order.
-9. `IgnoreRulePerDirectoryCounts` is used to track how many rules were added in each directory, so that many rules can be removed from the list when we leave it.
+6. `Queue` keeps track of which directories we still need to visit (or re-visit).
+7. `DirectoryHasValidChildren` and `OutputDirectories` make the `Directory` switch work by tracking which directories need to be output; the second stack is necessary because we can only know what directories are valid *after* visiting all their children, and they're re-visited in *reverse* order.
+8. `IgnoreRulePerDirectoryCounts` is used to track how many rules were added in each directory, so that many rules can be removed from the list when we leave it.
 
 We also define a few string constants, the names of the match groups in `GlobPatterns`. This is like what we did up above with `enum ParameterSets`, but with even less typing (though there is manually string association).
 
@@ -274,7 +274,7 @@ Next, here's the function that takes all those paths we passed in and turns them
             }
 
 After declaring all that, we can finally get to work.
-            
+
             protected override void ProcessRecord()
             {
                 var isLiteral = LiteralPath != null && LiteralPath.Length > 0;
@@ -298,7 +298,6 @@ If the current path is a file, handle it in a special way.
                         // then, skip ahead to write out any directories for this item, and continue.
                         goto WriteDirectories;
                     }
-    
 
 Otherwise, we clean up some other state-trackers and get ready to deal with a directory.
 
@@ -342,7 +341,6 @@ If directories are being output, push them onto a stack. Directories are re-enco
                         }
     
                         currentDepth += 1;
-                        
 
 The first thing we do in a new directory is look for an ingore file and add its rules if one exists.
 
@@ -358,7 +356,7 @@ The first thing we do in a new directory is look for an ingore file and add its 
                                         ignoreRuleCount += AddPatternRule(basePath, line);
                             }
                         }
-    
+
 For each directory in our stack from where we are now up to the root of the search, we keep track of how many rules were added in that directory. The next time this directory is at the front of the queue, all its children will have been processed, so we can remove the rules associated with this directory.
 
 Then, for each file or directory, we process it. `skipRemainingFiles` is a small optimization for the `Directory` switch to avoid iterating over the ignore rules for files whose parent directory has already been okayed for output.
@@ -415,7 +413,7 @@ All the directory-only rules match a '/' at the end of the item name; the non-di
 
                 if(isDirectory)
                     itemName += '/';
-                
+
 Then, for each rule (in reverse order of declaration, as that's how they're stored), check the name, stopping once we hit a rule that applies.
 
                 foreach(var rule in IgnoreRules)
@@ -437,7 +435,7 @@ Otherwise, if the rule didn't match the item and we are outputting ignored items
                         return false;
                     }
                 }
-    
+
 If no rule ignored the file, and we only want to output ignored files, then this will skip to the next item.
 
                 if(Ignored)
