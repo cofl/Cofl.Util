@@ -450,6 +450,19 @@ Describe 'Get-FilteredChildItem' {
                     "${TempDirectory}${DirectorySeparator}test-directory"
                 )
         }
+
+        It 'Does not exclude directories with the same name as the ignore file' {
+            In $TempDirectory {
+                In (New-Item -ItemType Directory -Name $IgnoreFileName) {
+                    New-Item -ItemType File -Name 'test'
+                }
+            }
+
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Directory | Select-Object -ExpandProperty FullName | Should -Be @(
+                $TempDirectory
+                "${TempDirectory}${DirectorySeparator}$IgnoreFileName"
+            )
+        }
     }
 
     Context 'Multiple ignore files' {

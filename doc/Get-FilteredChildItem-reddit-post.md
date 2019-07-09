@@ -48,363 +48,422 @@ The use of Unix directory separators (`/`) is mandatory in patterns.
 
 ---
 
-### The Script
+### The Code
 
-This script makes use of a lot of .NET classes. Right at the top of the file, we import the namespaces of those classes so we don't have to type so much later.
+This cmdlet is C#, and so makes use of a lot of .NET classes. Right at the top of the file, we import the namespaces of those classes so we don't have to type so much later. We also alias two of the classes to other names, because `Path` and `Directory` are also variables, and the compiler prefers those over class names. It's also good practice to put C# classes in namespaces, so we do that, too, using the name of the module as the namespace.
 
-    using namespace System
-    using namespace System.Collections.Generic
-    using namespace System.IO
-    using namespace System.Text.RegularExpressions
+    using System.Collections.Generic;
+    using System.IO;
+    using System.Management.Automation;
+    using System.Text.RegularExpressions;
+    using IOPath = System.IO.Path;
+    using IODirectory = System.IO.Directory;
 
-Next, the function definition. This is an [Advanced Function](https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_functions_advanced) that makes use of the `[CmdletBinding()]` attribute to define parameter sets. We also define our output type to be `System.IO.FileSystemInfo`, which is the base class shared by both File and Directory information objects (this cmdlet can output either one).
-
-    function Get-FilteredChildItem
+    namespace Cofl.Util
     {
-        [CmdletBinding(DefaultParameterSetName='Default')]
-        [OutputType([System.IO.FileSystemInfo])]
-        PARAM (
 
-The `Path` parameter is required, and must be a directory. It can come either from a string, or from a `DirectoryInfo` object,
-and can take input from the pipeline.
+Next, the cmdlet definition. If this were in PowerShell, we'd use the `[CmdletBinding()]` attribute to make it an [Advanced Function](https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_functions_advanced) and gain access to some more powerful features, but in C# we need two parts:
 
-            [Parameter(Mandatory=$true,ValueFromPipeline=$true,Position=0)]
-                [Alias('LiteralPath')]
-                [Alias('PSPath')]
-                [DirectoryInfo]$Path,
+1. The `[Cmdlet]` attribute, to name our class as a cmdlet in PowerShell.
+2. Inheriting from the `PSCmdlet` class, so we have access to the path resolver methods.
 
-The `IgnoreFileName` parameter is given the name of the files to ignore. If you wanted to ignore everything Git did, for example, you'd tell it `'.gitignore'`. Normally, ignore files are left out of the output, but you can enable them being processed like all other files with the `-IncludeIgnoreFiles` switch.
+We also throw an `[OutputType]` attribute here so PowerShell's intellisense knows what's coming its way.
 
-            [Parameter()]
-                [Alias('ifn')]
-                [string]$IgnoreFileName,
-            [Parameter(ParameterSetName='Default')]
-                [switch]$IncludeIgnoreFiles,
+        [Cmdlet(VerbsCommon.Get, "FilteredChildItem", DefaultParameterSetName = nameof    (GetFilteredChildItemCmdlet.ParameterSets.Default))]
+        [OutputType(typeof(FileInfo), typeof(DirectoryInfo))]
+        public sealed class GetFilteredChildItemCmdlet : PSCmdlet
+        {
 
-`IgnorePattern` allows pattern rules that would have been defined in an ignore file (see previous parameter) to be defined as a string or string array. Rules added here are inserted first, before any other rules, as if they were declared at the top of an ignore file in the directory given to `-Path`.
+The two parameter sets this cmdlet supports are *Default* and *Literal*, split along the same line as `Get-ChildItem`'s parameter sets: the LiteralPath parameter, which doesn't process wildcards. I use an enum to define the names so I can use [`nameof`](https://docs.microsoft.com/en-us/dotnet/csharp/language-reference/keywords/nameof) and avoid mis-typing them &mdash; the compiler will check that these names, where they're used, are right.
 
-            [Parameter()]
-                [Alias('ip')]
-                [string[]]$IgnorePattern,
+            private enum ParameterSets
+            {
+                Default,
+                Literal
+            }
+    
+The `Path` parameter isn't required. In binary cmdlets, parameters are given as [properties](https://docs.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/properties). We can assign our defaults the same way as normal; here, the default is the current location. It is possible to pass in multiple paths, either as an array, or via the pipeline. With `Path`, [wildcards](https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_wildcards?view=powershell-6) like `*` and `?` are processed, so something like `$BaseDir/*/inner` is possible. If a file is given instead of a directory, the only way to filter names is via the `IgnorePattern` parameter, which uses the file's parent directory as the base path.
 
-Of course, some times you don't want the files themselves, but instead the directories that contain them. Providing the `-Directory` switch will enable that behavior.
+            [Parameter(ValueFromPipeline = true, ValueFromPipelineByPropertyName = true, Position = 0,     ParameterSetName = nameof(ParameterSets.Default))]
+            [SupportsWildcards]
+            public string[] Path { get; set; } = new[]{ "." };
 
-            [Parameter(Mandatory=$true,ParameterSetName='Directory')]
-                [Alias('ad')]
-                [Alias('d')]
-                [switch]$Directory,
+`LiteralPath` is similar to `Path`, except it doesn't support wildcards at all. This is useful if you have things like `[x64]` in your file or folder names; if such a path was given to `Path`, it would match an `x`, a `6`, or a `4`, but not `[x64]` &mdash; with `LiteralPath`, it's the opposite. `LiteralPath` is also aliased with `PSPath`, and accepts pipeline input by property names.
+
+            [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, ParameterSetName = nameof    (ParameterSets.Literal))]
+            [Alias("PSPath")]
+            public string[] LiteralPath { get; set; }
+
+The `IgnoreFileName` parameter is given the name of the files to ignore. If you wanted to ignore everything Git did, for example, you'd tell it `'.gitignore'`. Normally, ignore files are left out of the output, but you can enable them being processed like all other files with the `IncludeIgnoreFiles` switch.
+
+            [Parameter]
+            [ValidateNotNullOrEmpty][Alias("ifn")]
+            public string IgnoreFileName { get; set; }
+
+`IgnorePattern` allows pattern rules that would have been defined in an ignore file (see previous parameter) to be defined as a string or string array. Rules added here are inserted first, before any other rules, as if they were declared at the top of an ignore file in the directory given to `Path`.
+
+            [Parameter]
+            public string[] IgnorePattern { get; set; }
+    
+By default, ignore files are skipped in the output as if they weren't even there. You can, however, force them to be included (unless a pattern leaves them out) with the `IncludeIgnoreFiles` switch.
+
+            [Parameter]
+            public SwitchParameter IncludeIgnoreFiles { get; set; }
+    
+Of course, some times you don't want the files themselves, but instead the directories that contain them. Providing the `Directory` switch will enable that behavior.
+
+            [Parameter]
+            [Alias("d", "ad")]
+            public SwitchParameter Directory { get; set; }
 
 The last few parameters are all for limiting or allowing files in other ways: `-Depth` limits how many folders down from the one given in `-Path` that the cmdlet will check for files. `-Force` will allow the cmdlet to check hidden files and folders, and `-Hidden` will tell the cmdlet to check for *only* hidden files and folders.
 
-            [Parameter()]
-                [uint32]$Depth = [uint32]::MaxValue,
-            [Parameter()]
-                [Alias('ah')] # like Get-ChildItem
-                [switch]$Hidden,
-            [Parameter()]
-                [switch]$Force,
+            [Parameter]
+            public uint Depth { get; set; } = uint.MaxValue;
 
+            [Parameter]
+            [Alias("ah")]
+            public SwitchParameter Hidden { get; set; }
+
+            [Parameter]
+            public SwitchParameter Force { get; set; }
+    
 The last parameter is `Ignored`, which inverts the output behavior: if a file would have been output, it isn't, and if it would have been skipped, it's now output to the pipeline.
 
-            [Parameter()]
-                [switch]$Ignored
-        )
+            [Parameter]
+            public SwitchParameter Ignored { get; set; }
 
-Finally done with our parameters, we get to the `begin` block that runs once for all directories given to `-Path` on the pipeline. I use it to declare regular expressions, delegates, and functions that I'll use throughout the rest of the script:
+Finally done with the parameters, but not with the initialization in general. There are a number of regular expressions that are statically defined, as well as a delegate, and a number of variables that are shared between various support functions.
 
-1. `[regex]$CommentLine`, which matches lines in ignore files that should be skipped over. Comments can be added by starting the line with any amount of whitespace, then `#`, but empty or otherwise blank lines are also matched by this.
-2. `[regex]$TrailingWhitespace` is used to trim all un-escaped whitespace from the end of a line. Because files may end in whitespace, it's possible to escape that whitespace with a `\` character. Any whitespace after the last escaped whitespace is trimmed off.
-3. `[regex]$UnescapeCharacters` is another replacement regex that removes backslashes from the start of the line, and from before any whitespace.
-4. `[regex]$UnescapePatternCharacters` does the same thing, but for characters that have a special meaning in patterns: `?`, `*`, `\`, and `[`. These are processed later, which is why this regex is separate from the last one.
-5. `[regex]$GlobPatterns`. The Big One. This regex is used along with `[MatchEvaluator]$GlobPatternEvaluator` to turn the friendly wildcard patterns from files into nasty regular expressions.
-6. `[LinkedList[DirectoryInfo]]$Queue` keeps track of which directories we still need to visit.
-7. `[LinkedList[Tuple[bool,bool,regex]]]$IgnoreRules` keeps each pattern, in reverse order of their declaration (in `.gitignore` files, the last pattern defined that matches is the one that applies). Each pattern is kept with a pair of boolean values the determine if the pattern is an exception, and if the pattern only applies to directories or not.
-8. `[Dictionary[string,uint32]]$IgnoreRulePerDirectoryCounts` is used to track how many rules were added in each directory, so that many rules can be removed from the list when we leave it.
-9. `[Dictionary[string,bool]]$DirectoryHasValidChildren` and `[Stack[DirectoryInfo]]$OutputDirectories` are integral to the functionality of the `-Directory` switch.
-10. `[uint32]$CurrentDepth` makes the `-Depth` parameter possible.
-11. And finally, `function Add-PatternRule`, when given a directory name and a pattern from a file or the `-IgnorePattern` parameter, can convert and add that pattern to the `$IgnoreRules` list, returning 1 if it added a rule to the list, and 0 if it didn't.
+1. `CommentLine`, which matches lines in ignore files that should be skipped over. Comments can be added by starting the line with any amount of whitespace, then `#`, but empty or otherwise blank lines are also matched by this.
+2. `TrailingWhitespace` is used to trim all un-escaped whitespace from the end of a line. Because files may end in whitespace, it's possible to escape that whitespace with a `\` character. Any whitespace after the last escaped whitespace is trimmed off.
+3. `UnescapeCharacters` is another replacement regex that removes backslashes from the start of the line, and from before any whitespace.
+4. `UnescapePatternCharacters` does the same thing, but for characters that have a special meaning in patterns: `?`, `*`, `\`, and `[`. These are processed later, which is why this regex is separate from the last one.
+5. `GlobPatterns`. The Big One. This regex is used along with `GlobPatternEvaluator` to turn the friendly wildcard patterns from files into nasty regular expressions.
+7. `Queue` keeps track of which directories we still need to visit (or re-visit).
+8. `DirectoryHasValidChildren` and `OutputDirectories` make the `Directory` switch work by tracking which directories need to be output; the second stack is necessary because we can only know what directories are valid *after* visiting all their children, and they're re-visited in *reverse* order.
+9. `IgnoreRulePerDirectoryCounts` is used to track how many rules were added in each directory, so that many rules can be removed from the list when we leave it.
 
-        begin
-        {
-            [regex]$CommentLine = [regex]::new('^\s*(?:#.*)?$')
-            [regex]$TrailingWhitespace = [regex]::new('(?:(?<!\\)\s)+$')
-            [regex]$UnescapeCharacters = [regex]::new('^\\|\\(?=\s)')
-            [regex]$UnescapePatternCharacters = [regex]::new('^\\(?=[\[\\\*\?])')
-            [regex]$GlobPatterns = [regex]::new('(?<!\\)\[(?<set>[^/]+)\]|(?<glob>/\*\*)|(?<star>(?<!\\)\*)|(?<any>(?<!\\)\?)|(?<text>(?:[^/?*[]|(?<=\\)[?*[])+)')
-    
-            [MatchEvaluator]$GlobPatternEvaluator = [MatchEvaluator]{
-                param([Match]$Match)
-    
-In this delegate, we replace the various glob patterns with regex patterns, and escape all other text (except `/`).
+We also define a few string constants, the names of the match groups in `GlobPatterns`. This is like what we did up above with `enum ParameterSets`, but with even less typing (though there is manually string association).
 
-                if($Match.Groups['set'].Success)
-                {
-                    [string]$Escaped = [regex]::Escape($Match.Groups['set'].Value)
-                    if($Escaped[0] -eq '!')
-                    {
-                        $Escaped = '^' + $Escaped.Substring(1)
-                    }
-                    return "[$Escaped]"
-                } elseif($Match.Groups['glob'].Success)
-                {
-                    return '(/.*)?'
-                } elseif($Match.Groups['star'].Success)
-                {
-                    return '[^/]*'
-                } elseif($Match.Groups['any'].Success)
-                {
-                    return '.'
-                } else
-                {
-                    return [regex]::Escape($UnescapePatternCharacters.Replace($Match.Groups['text'].Value, ''))
-                }
-            }
-    
-            [LinkedList[DirectoryInfo]]$Queue = [LinkedList[DirectoryInfo]]::new()
-            [LinkedList[Tuple[bool,bool,regex]]]$IgnoreRules = [LinkedList[Tuple[bool,bool,regex]]]::new()
+            private static Regex CommentLine = new Regex(@"^\s*(?:#.*)?$");
+            private static Regex TrailingWhitespace = new Regex(@"(?:(?<!\\)\s)+$");
+            private static Regex UnescapeCharacters = new Regex(@"^\\|\\(?=\s)");
+            private static Regex UnescapePatternCharacters = new Regex(@"^\\(?=[\[\\\*\?])");
 
-`$IgnoreRulePerDirectoryCounts` is also used as a visited tracker. The second time a directory is seen, its added ignore rules are popped from the above list.
+            private const string SetGroup = "Set";
+            private const string GlobGroup = "Glob";
+            private const string StarGroup = "Star";
+            private const string AnyGroup = "Any";
+            private const string TextGroup = "Text";
+            
+            private static Regex GlobPatterns = new Regex(string.Join("|", $@"(?<!\\)\[(?<{SetGroup}>[^/]+)\]",
+                                                                    $@"(?<{GlobGroup}>/\*\*)",
+                                                                    $@"(?<{StarGroup}>(?<!\\)\*)",
+                                                                    $@"(?<{AnyGroup}>(?<!\\)\?)",
+                                                                    $@"(?<{TextGroup}>(?:[^/?*[]|(?<=\\)[?*[])+)"));
 
-            [Dictionary[string,uint32]]$IgnoreRulePerDirectoryCounts = [Dictionary[string,uint32]]::new()
-            [Dictionary[string,bool]]$DirectoryHasValidChildren = [Dictionary[string,bool]]::new()
-            [Stack[DirectoryInfo]]$OutputDirectories = [Stack[DirectoryInfo]]::new()
-            [uint32]$CurrentDepth = 0
-    
-            function Add-PatternRule
+            private static string GlobPatternEvaluator(Match match)
             {
-                PARAM (
-                    [Parameter(Mandatory=$true)][string]$BasePath,
-                    [Parameter(Mandatory=$true)][AllowEmptyString()][string]$Pattern
-                )
-    
-                if($CommentLine.IsMatch($Pattern))
-                {
-                    return 0
-                }
-                [bool]$IsExcludeRule = $false
-                if($Pattern[0] -eq '!')
-                {
-                    $IsExcludeRule = $true
-                    $Pattern = $Pattern.Substring(1)
-                }
-                # Do an initial trim/unescape/prefix/suffix
-                $Pattern = $UnescapeCharacters.Replace($TrailingWhitespace.Replace($Pattern, ''), '')
-                [bool]$IsDirectoryRule = $Pattern[-1] -eq '/'
-                $Pattern = if($Pattern[0] -eq '/') { $Pattern } else { "/**/$Pattern" }
-                $Pattern = if($IsDirectoryRule) { $Pattern } else { "$Pattern/**" }
-    
-                # Transform the cleaned pattern into a regex and add it to the ignore rule list
-                [void]$IgnoreRules.AddFirst([Tuple[bool,bool,regex]]::new($IsExcludeRule, $IsDirectoryRule,
-                        [regex]::new("^$BasePath$($GlobPatterns.Replace($Pattern, $GlobPatternEvaluator))$")))
-                return 1
+
+In this delegate, we replace the various glob patterns with regex patterns, and escape all other text (except /).
+
+                if(match.Groups[TextGroup].Success)
+                    return Regex.Escape(UnescapePatternCharacters.Replace(match.Groups[TextGroup].Value, ""));
+                if(match.Groups[StarGroup].Success)
+                    return "[^/]*";
+                if(match.Groups[GlobGroup].Success)
+                    return "(/.*)?";
+                if(match.Groups[AnyGroup].Success)
+                    return ".";
+                // else MatchGroups.Set
+                var escaped = Regex.Escape(match.Groups[SetGroup].Value);
+                return escaped[0] == '!' ? $"[^{escaped.Substring(1)}]" : $"[{escaped}]";
             }
-        }
+
+            private LinkedList<DirectoryInfo> Queue = new LinkedList<DirectoryInfo>();
+            private Dictionary<string, bool> DirectoryHasValidChildren = new Dictionary<string, bool>();
+            private Stack<DirectoryInfo> OutputDirectories = new Stack<DirectoryInfo>();
+            private Dictionary<string, uint> IgnoreRulePerDirectoryCounts = new Dictionary<string, uint>();
+
+Each rule is stored in a structure; in another version, this was a tuple, but not that we're in C#, we can use these to gain some readability.
+
+The struct can't work alone, though, so there's also the `IgnoreRules` list, which keeps track of all the rules defined in reverse order, so the last rule is first.
+
+            private struct IgnoreRule
+            {
+                public readonly bool IsDirectoryRule;
+                public readonly bool IsExcludeRule;
+                public readonly Regex Pattern;
+    
+                public IgnoreRule(bool isDirectoryRule, bool isExcludeRule, Regex pattern)
+                {
+                    IsDirectoryRule = isDirectoryRule;
+                    IsExcludeRule = isExcludeRule;
+                    Pattern = pattern;
+                }
+            }
+            private LinkedList<IgnoreRule> IgnoreRules = new LinkedList<IgnoreRule>();
+
+With `IgnoreRules` outside the function, we can create another function, `byte AddPatternRule(string, string)`, to process each pattern into a rule and add it to the list, returning `0` or `1` depending on how many rules it added (it can only do one rule at a time).
+
+            private byte AddPatternRule(string basePath, string pattern)
+            {
+                if(null == pattern || CommentLine.IsMatch(pattern))
+                    return 0;
+                pattern = pattern.TrimStart();
+                var isExcludeRule = pattern[0] == '!';
+                if(isExcludeRule)
+                    pattern = pattern.Substring(1);
+                pattern = UnescapeCharacters.Replace(TrailingWhitespace.Replace(pattern, ""), "");
+                if(pattern[0] != '/')
+                    pattern = $"/**/{pattern}";
+                var isDirectoryRule = pattern[pattern.Length - 1] == '/';
+                if(!isDirectoryRule)
+                    pattern = $"{pattern}/**";
+                var rule = new Regex($"^{basePath}{GlobPatterns.Replace(pattern, GlobPatternEvaluator)}$");
+                IgnoreRules.AddFirst(new IgnoreRule(isDirectoryRule, isExcludeRule, rule));
+                return 1;
+            }
+
+`uint AddIgnorePatterns(string)` *can* do more than one pattern, but only for the `IgnorePattern` parameter. It returns the total number of rules added from that set.
+
+            private uint AddIgnorePatterns(string basePath)
+            {
+                uint counter = 0;
+                if(IgnorePattern != null)
+                    foreach(var pattern in IgnorePattern)
+                        counter += AddPatternRule(basePath, pattern);
+                return counter;
+            }
+
+Next, here's the function that takes all those paths we passed in and turns them into nice, clean, normal, full paths. `enumerable` is either `Path` or `LiteralPath`; `literal` is how we should process them. To make it easy, this is an [generator](https://docs.microsoft.com/en-us/dotnet/csharp/language-reference/keywords/yield), so we don't need to deal with all the items all at once.
+
+            private IEnumerable<FileSystemInfo> ResolvePaths(IEnumerable<string> enumerable, bool literal)
+            {
+                if(null == enumerable)
+                    yield break;
+                foreach(var item in enumerable)
+                {
+                    if(string.IsNullOrEmpty(item))
+                        continue;
+                    if(!literal)
+                    {
+                        // GetResolvedProviderPathFromPSPath expands wildcards
+                        var result = GetResolvedProviderPathFromPSPath(item, out var provider);
+                        if(null != result)
+                        {
+                            foreach(var path in result)
+                            {
+                                if(IODirectory.Exists(path))
+                                    yield return new DirectoryInfo(path);
+                                else
+                                    yield return new FileInfo(path);
+                            }
+                        }
+                    } else
+                    {
+                        // GetUnresolvedProviderPathFromPSPath, though, does not.
+                        var result = GetUnresolvedProviderPathFromPSPath(item);
+                        if(IODirectory.Exists(result))
+                            yield return new DirectoryInfo(result);
+                        else
+                            yield return new FileInfo(result);
+                    }
+                }
+            }
 
 After declaring all that, we can finally get to work.
-
-    process
-        {
-            $Queue.Clear()
-            $IgnoreRules.Clear()
-            $IgnoreRulePerDirectoryCounts.Clear()
-            $DirectoryHasValidChildren.Clear()
-            [void]$Queue.AddFirst([DirectoryInfo]::new((Get-Item -LiteralPath $Path.FullName).FullName.TrimEnd('\', '/')))
-            [uint32]$IgnoreRuleCount = 0
-            $CurrentDepth = 0
-    
-            [string]$BasePath = [regex]::Escape($Queue.First.Value.FullName.Replace('\', '/'))
-            foreach($Pattern in $IgnorePattern)
+            
+            protected override void ProcessRecord()
             {
-                $IgnoreRuleCount += Add-PatternRule -BasePath $BasePath -Pattern $Pattern
-            }
-    
-            while($Queue.Count -gt 0)
-            {
-                [LinkedListNode[DirectoryInfo]]$NextNode = $Queue.First
-                [DirectoryInfo]$Top = $NextNode.Value
-                if($IgnoreRulePerDirectoryCounts.ContainsKey($Top.FullName))
+                var isLiteral = LiteralPath != null && LiteralPath.Length > 0;
+                foreach(var path in ResolvePaths(isLiteral ? LiteralPath : Path, isLiteral))
                 {
+
+For every processed path, we need to clear out the rules we've already added.
+
+                    IgnoreRules.Clear();
+
+If the current path is a file, handle it in a special way.
+
+                    if(!path.Attributes.HasFlag(FileAttributes.Directory))
+                    {
+                        // skip out early if the file is an ignore file and those aren't included.
+                        if(path.Name == IgnoreFileName && !IncludeIgnoreFiles)
+                            continue;
+                        AddIgnorePatterns(((FileInfo) path).DirectoryName.Replace('\\', '/'));
+                        ProcessFileSystemItem(path);
+    
+                        // then, skip ahead to write out any directories for this item, and continue.
+                        goto WriteDirectories;
+                    }
+    
+
+Otherwise, we clean up some other state-trackers and get ready to deal with a directory.
+
+                    Queue.Clear();
+                    IgnoreRulePerDirectoryCounts.Clear();
+                    DirectoryHasValidChildren.Clear();
+                    
+                    // add the next item and begin.
+                    Queue.AddFirst((DirectoryInfo) path);
+                    
+                    uint currentDepth = 0;
+                    var ignoreRuleCount = AddIgnorePatterns(Regex.Escape(Queue.First.Value.FullName.Replace('\\', '/')));
+                    while(Queue.Count > 0)
+                    {
+                        var nextNode = Queue.First;
+                        var top = nextNode.Value;
+    
+                        if(IgnoreRulePerDirectoryCounts.ContainsKey(top.FullName))
+                        {
 
 If this is the second time we've seen this node, remove the rules  for this directory from the list. Then, remove this directory from the map (we won't see it again, so save some memory).
 
-                    [uint32]$IgnoreRuleCount = $IgnoreRulePerDirectoryCounts[$Top.FullName]
-                    while($IgnoreRuleCount -gt 0)
-                    {
-                        $IgnoreRules.RemoveFirst()
-                        $IgnoreRuleCount -= 1
-                    }
-                    [void]$IgnoreRulePerDirectoryCounts.Remove($Top.FullName)
-                    $Queue.RemoveFirst()
-                    $CurrentDepth -= 1
+                            ignoreRuleCount = IgnoreRulePerDirectoryCounts[top.FullName];
+                            for(; ignoreRuleCount > 0; ignoreRuleCount -= 1)
+                                IgnoreRules.RemoveFirst();
+                            IgnoreRulePerDirectoryCounts.Remove(top.FullName);
+                            Queue.RemoveFirst();
+                            currentDepth -= 1;
     
-                    if($DirectoryHasValidChildren[$Top.FullName])
-                    {
+                            if(DirectoryHasValidChildren.ContainsKey(top.FullName))
+                            {
 
 If directories are being output, push them onto a stack. Directories are re-encountered in reverse order, so they need to be re-reversed before being output.
 
-                        $OutputDirectories.Push($Top)
-                        $DirectoryHasValidChildren[$Top.Parent.FullName] = $true
-                        [void]$DirectoryHasValidChildren.Remove($Top.FullName)
-                    }
-                    continue
-                }
-                $CurrentDepth += 1
-                try
-                {
-                    # First, look for the ignore file if there is one.
-                    if(![string]::IsNullOrEmpty($IgnoreFileName))
-                    {
-                        [FileInfo]$IgnoreFile = [FileInfo]::new([Path]::Combine($Top.FullName, $IgnoreFileName))
-                        if($IgnoreFile.Exists -and !$IgnoreFile.Attributes.HasFlag([FileAttributes]::Directory))
+                                OutputDirectories.Push(top);
+                                DirectoryHasValidChildren[top.Parent.FullName] = true;
+                                DirectoryHasValidChildren.Remove(top.FullName);
+                            }
+                            continue;
+                        }
+    
+                        currentDepth += 1;
+                        
+
+The first thing we do in a new directory is look for an ingore file and add its rules if one exists.
+
+                        if(!string.IsNullOrEmpty(IgnoreFileName))
                         {
-                            try
+                            var ignoreFile = new FileInfo(IOPath.Combine(top.FullName, IgnoreFileName));
+                            if(ignoreFile.Exists && !ignoreFile.Attributes.HasFlag(FileAttributes.Directory))
                             {
-                                # Process each line of the file as a new rule.
-                                [StreamReader]$Reader = [StreamReader]::new($IgnoreFile.OpenRead())
-                                [string]$BasePath = [regex]::Escape($Top.FullName.Replace('\', '/'))
-                                [AllowNull()][string]$Line = $null
-                                while($null -ne ($Line = $Reader.ReadLine()))
-                                {
-                                    $IgnoreRuleCount += Add-PatternRule -BasePath $BasePath -Pattern $Line
-                                }
-                            } finally
-                            {
-
-A finally block always runs, even when an exception isn't handled. This one is used to dispose of the stream reader and its underlying stream, closing the ignore file and freeing up the associated resources.
-
-                                if($null -ne $Reader)
-                                {
-                                    $Reader.Close()
-                                    $Reader = $null
-                                }
+                                var basePath = Regex.Escape(top.FullName.Replace('\\', '/'));
+                                using(var reader = new StreamReader(ignoreFile.OpenRead()))
+                                    // Process each line of the file as a new rule.
+                                    for(var line = reader.ReadLine(); null != line; line = reader.ReadLine())
+                                        ignoreRuleCount += AddPatternRule(basePath, line);
                             }
                         }
-                    }
-
+    
 For each directory in our stack from where we are now up to the root of the search, we keep track of how many rules were added in that directory. The next time this directory is at the front of the queue, all its children will have been processed, so we can remove the rules associated with this directory.
 
-                    $IgnoreRulePerDirectoryCounts[$Top.FullName] = $IgnoreRuleCount
-                    $IgnoreRuleCount = 0
-    
-Then, for each file or directory...
+Then, for each file or directory, we process it. `skipRemainingFiles` is a small optimization for the `Directory` switch to avoid iterating over the ignore rules for files whose parent directory has already been okayed for output.
 
-                    [IEnumerator[FileSystemInfo]]$Entries = $Top.EnumerateFileSystemInfos().GetEnumerator()
-                    [IEnumerator[Tuple[bool,bool,regex]]]$IgnoreRule = $IgnoreRules.GetEnumerator()
-                    :FilterLoop
-                    while($Entries.MoveNext())
-                    {
-                        # .Reset() lets us re-use the same iterator over and over again
-                        $IgnoreRule.Reset()
-                        [FileSystemInfo]$Item = $Entries.Current
-                        [bool]$IsDirectory = $Item.Attributes.HasFlag([FileAttributes]::Directory)
-                        if(!$IsDirectory -and !$IncludeIgnoreFiles -and $Item.Name -eq $IgnoreFileName)
-                        {
+                        IgnoreRulePerDirectoryCounts[top.FullName] = ignoreRuleCount;
+                        ignoreRuleCount = 0;
+    
+                        var skipRemainingFiles = false;
+                        using(var entries = top.EnumerateFileSystemInfos().GetEnumerator())
+                        while(entries.MoveNext())
+                            skipRemainingFiles |= ProcessFileSystemItem(entries.Current, currentDepth, nextNode,     skipRemainingFiles);
+                    }
+
+You may be familiar with `goto`. Some say they're bad. Here, I say they save a lot of indenting. There's just one more part to *this* function, if we're outputting directories instead of files. Because directories are re-visited backwards, they need to be put on a stack, and then all popped off at the end.
+
+                    WriteDirectories:
+                    // If there are directories to output, output them in the right order.
+                    while(OutputDirectories.Count > 0)
+                        WriteObject(OutputDirectories.Pop());
+                }
+            }
+
+There's just one more function, I promise. Here, we have `ProcessFileSystemItem`, the guts that actually does the filtering.
+
+            private bool ProcessFileSystemItem(FileSystemInfo item, uint currentDepth = 0,     LinkedListNode<DirectoryInfo> nextNode = null, bool skipRemainingFiles = false)
+            {
+                var isDirectory = item.Attributes.HasFlag(FileAttributes.Directory);
+
+If this is a file and those are being skipped right now, skip over it.
+
+                if(!isDirectory && skipRemainingFiles)
+                    return true;
 
 If this is an ignore file and those shouldn't be processed, skip over it.
 
-                            continue
-                        }
-                        [bool]$IsHidden = $Item.Attributes.HasFlag([FileAttributes]::Hidden)
-                        if(!$IsDirectory -and !$Force -and ($Hidden -ne $IsHidden))
-                        {
+                if(!isDirectory && !IncludeIgnoreFiles && item.Name == IgnoreFileName)
+                    return false;
+                var isHidden = item.Attributes.HasFlag(FileAttributes.Hidden);
 
 If this is a hidden file and we're not supposed to show those, or this isn't a hidden file and $Hidden is true, then skip this item. Directories have to be searched always, in case they have hidden children but aren't hidden themselves.
 
-                            continue
-                        }
-                        if($IsDirectory -and $IsHidden -and !($Force -or $Hidden))
-                        {
+                if(!isDirectory && !Force && (Hidden != isHidden))
+                    return false;
 
 If we aren't looking for hidden files at all and this directory is hidden, skip it.
 
-                            continue
-                        }
-                        [string]$ItemName = $Item.FullName.Replace('\', '/')
-                        if($IsDirectory)
-                        {
+                if(isDirectory && isHidden && !(Force || Hidden))
+                    return false;
+                var itemName = item.FullName.Replace('\\', '/');
 
 All the directory-only rules match a '/' at the end of the item name; the non-directory-only rules also match the '/', but it can be not at the end.
 
-                            $ItemName += '/'
-                        }
+                if(isDirectory)
+                    itemName += '/';
+                
+Then, for each rule (in reverse order of declaration, as that's how they're stored), check the name, stopping once we hit a rule that applies.
 
-This `do {} while($false)` structure is a GoTo. PowerShell doesn't actually have those, but sometimes they're useful, such as here, when there are a number of cases where we want to use the item handling code to either add more directories to our list or output files, and the boolean logic to determine that isn't immensely clear or straightforward.
-
-                        :GotoLoop do {
-                            # For each rule in reverse order of declaration...
-                            while($IgnoreRule.MoveNext())
-                            {
-                                if($IgnoreRule.Current.Item2 -and !$IsDirectory)
-                                {
-                                    # Skip directory ignore rules for files.
-                                    continue
-                                }
-
-This next bit is a bit complicated.
-
-If the rule matched the item, and we aren't outputting ignored items, then if the rule is an allow rule and we aren't outputting ignored items, handle the item. Otherwise, if the rule didn't match the item and we are outputting ignored items, then if the rule is an ignore rule and we're outputting ignored items, handle the item.
-
-                                if($IgnoreRule.Current.Item3.IsMatch($ItemName) -ne $Ignored)
-                                {
-                                    if($IgnoreRule.Current.Item1 -ne $Ignored)
-                                    {
-                                        # If this is an exclusion/allow rule, go to the write-out part.
-                                        break GotoLoop
-                                    }
-                                    # Otherwise, we're done here, move on to the next item
-                                    continue FilterLoop
-                                }
-                            }
-
-If no rule ignored the file, and we only want to output ignored files, skip to the next item.
-
-                            if($Ignored)
-                            {
-                                continue FilterLoop
-                            }
-                        } while($false) # End GotoLoop
-                        if($IsDirectory)
-                        {
-                            if($CurrentDepth -le $Depth)
-                            {
-                                [void]$Queue.AddBefore($NextNode, [DirectoryInfo]$Item)
-                            }
-                        } elseif($Directory)
-                        {
-                            # Used by -Directory to know if it's supposed to output this one or not.
-                            $DirectoryHasValidChildren[([FileInfo]$Item).DirectoryName] = $true
-                        } else
-                        {
-                            Write-Output -InputObject ([FileInfo]$Item)
-                        }
-                    }
-                } finally
+                foreach(var rule in IgnoreRules)
                 {
+                    // Skip directory ignore rules for files.
+                    if(rule.IsDirectoryRule && !isDirectory)
+                        continue;
 
-Once again, a finally block always runs. This one is used to dispose of our iterators if they still exist. In C#, this structure could be accomplished more cleanly with the `using(var entries = ...) { ... }` construction.
+This next check can be a bit complicated to follow; it took me a good few minutes to grok what needed to happen when I wrote it. If the rule matched the item, and we aren't outputting ignored items, then if the rule is an allow rule and we aren't outputting ignored items, handle the item.
 
-                    if($null -ne $Entries)
+Otherwise, if the rule didn't match the item and we are outputting ignored items, then if the rule is an ignore rule and we're outputting ignored items, handle the item.
+
+                    if(rule.Pattern.IsMatch(itemName) != Ignored.IsPresent)
                     {
-                        $Entries.Dispose()
-                        $Entries = $null
-                    }
-                    if($null -ne $IgnoreRule)
-                    {
-                        $IgnoreRule.Dispose()
-                        $IgnoreRule = $null
+                        // If this is an exclusion/allow rule, go to the write-out part.
+                        if(rule.IsExcludeRule != Ignored)
+                            goto Output;
+                        // Otherwise, we're done here
+                        return false;
                     }
                 }
-            }
-        }
+    
+If no rule ignored the file, and we only want to output ignored files, then this will skip to the next item.
 
-Ha! You thought we were done! There's just one more part, if we're outputting directories instead of files. Because directories are re-visited backwards, they need to be put on a stack, and then all popped off at the end.
+                if(Ignored)
+                    return false;
 
-        end
-        {
-            # If there are directories to output, output them in the right order.
-            while($OutputDirectories.Count -gt 0)
-            {
-                Write-Output -InputObject $OutputDirectories.Pop()
+At the end, though, there's the common output-handling code for all cases that need to output or change the output state somehow:
+
+- Directories are recursed into if we're supposed to.
+- Or, if it's a file:
+
+   1. If outputting a directory, mark the directory this file is in as valid.
+   2. Or, output the file to the pipeline now.
+
+We return `true` if the directory was marked as valid, so the next time this is called, it'll skip files.
+
+                Output:
+                if(isDirectory)
+                {
+                    if(currentDepth <= Depth)
+                        Queue.AddBefore(nextNode, (DirectoryInfo) item);
+                } else if(Directory)
+                {
+                    DirectoryHasValidChildren[((FileInfo) item).DirectoryName] = true;
+                    return true;
+                } else
+                {
+                    WriteObject((FileInfo) item);
+                }
+                return false;
             }
         }
     }
@@ -413,4 +472,8 @@ Ha! You thought we were done! There's just one more part, if we're outputting di
 
 If you're still here, all the way down at the bottom, thanks for sticking with me the whole way through that!
 
-TL;DR: [`Get-FilteredChildItem`](https://gist.github.com/cofl/52816571c805161c75ac44dfc8634a93) emulated `.gitignore` files' patterns to arbitrarily match large file hierarchies.
+I also want to give a special thanks to /u/lordicarus, who provided insightful comments that led to some great improvements in how the cmdlet behaves, such as accepting files.
+
+If you want to give it a try, it's available either in source on GitHub, or from the PowerShellGallery in the [Cofl.Util](https://www.powershellgallery.com/packages/Cofl.Util/1.2.0) module version 1.2 or higher.
+
+TL;DR: [`Get-FilteredChildItem`](https://github.com/cofl/Cofl.Util/blob/master/src/Cofl.Util/GetFilteredChildItemCmdlet.cs) emulated `.gitignore` files' patterns to arbitrarily match large file hierarchies.

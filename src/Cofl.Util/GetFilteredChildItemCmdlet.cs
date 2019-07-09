@@ -353,7 +353,7 @@ namespace Cofl.Util
                     var skipRemainingFiles = false;
                     using(var entries = top.EnumerateFileSystemInfos().GetEnumerator())
                     while(entries.MoveNext())
-                        skipRemainingFiles |= ProcessFileSystemItem(entries.Current, currentDepth, nextNode, skipRemainingFiles);
+                        skipRemainingFiles = ProcessFileSystemItem(entries.Current, currentDepth, nextNode, skipRemainingFiles);
                 }
 
                 WriteDirectories:
