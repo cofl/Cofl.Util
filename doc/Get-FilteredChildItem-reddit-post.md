@@ -310,7 +310,8 @@ Otherwise, we clean up some other state-trackers and get ready to deal with a di
                     Queue.AddFirst((DirectoryInfo) path);
                     
                     uint currentDepth = 0;
-                    var ignoreRuleCount = AddIgnorePatterns(Regex.Escape(Queue.First.Value.FullName.Replace('\\', '/')));
+                    var ignoreRuleCount = AddIgnorePatterns(Regex.Escape(
+                        Queue.First.Value.FullName.Replace('\\', '/')));
                     while(Queue.Count > 0)
                     {
                         var nextNode = Queue.First;
@@ -368,7 +369,8 @@ Then, for each file or directory, we process it. `skipRemainingFiles` is a small
                         var skipRemainingFiles = false;
                         using(var entries = top.EnumerateFileSystemInfos().GetEnumerator())
                         while(entries.MoveNext())
-                            skipRemainingFiles |= ProcessFileSystemItem(entries.Current, currentDepth, nextNode,     skipRemainingFiles);
+                            skipRemainingFiles = ProcessFileSystemItem(entries.Current, currentDepth,
+                                                                       nextNode, skipRemainingFiles);
                     }
 
 You may be familiar with `goto`. Some say they're bad. Here, I say they save a lot of indenting. There's just one more part to *this* function, if we're outputting directories instead of files. Because directories are re-visited backwards, they need to be put on a stack, and then all popped off at the end.
@@ -382,7 +384,8 @@ You may be familiar with `goto`. Some say they're bad. Here, I say they save a l
 
 There's just one more function, I promise. Here, we have `ProcessFileSystemItem`, the guts that actually does the filtering.
 
-            private bool ProcessFileSystemItem(FileSystemInfo item, uint currentDepth = 0,     LinkedListNode<DirectoryInfo> nextNode = null, bool skipRemainingFiles = false)
+            private bool ProcessFileSystemItem(FileSystemInfo item, uint currentDepth = 0,
+                LinkedListNode<DirectoryInfo> nextNode = null, bool skipRemainingFiles = false)
             {
                 var isDirectory = item.Attributes.HasFlag(FileAttributes.Directory);
 
