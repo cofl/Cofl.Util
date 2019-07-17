@@ -5,10 +5,13 @@
 [string]$DotNet = Get-Command 'dotnet.exe' -CommandType Application -ErrorAction Stop | Select-Object -ExpandProperty Source
 
 [string]$PowerShellSrcRoot = "$PSScriptRoot/src/Cofl.Util.PowerShell"
+[string]$PowerShellSrcRoot2 = "$PSScriptRoot/src/Cofl.GetFilteredChildItem.PowerShell"
 [string]$OutName = 'build'
 [string]$OutDir = "$PSScriptRoot/$OutName"
 [string]$ModuleName = 'Cofl.Util'
 [string]$ModuleOutDir = "$OutDir/$ModuleName"
+[string]$ModuleName2 = 'Cofl.GetFilteredChildItem'
+[string]$ModuleOutDir2 = "$OutDir/$ModuleName2"
 
 Task default -depends Build
 
@@ -55,7 +58,22 @@ Task BuildDebug -depends BuildPowerShell {
     Copy-Item -Path "$PSScriptRoot/src/Cofl.Util/bin/Debug/netstandard2.0/Cofl.Util.dll" -Destination "$ModuleOutDir/$ModuleVersion"
 }
 
-Task Deploy -depends Build {
+Task BuildGetFilteredChildItem -depends Init {
+    if([string]::IsNullOrWhiteSpace($ModuleVersion2)){
+        $ModuleVersion2 = '0.0.0'
+    }
+    if(!(Test-Path -LiteralPath $ModuleOutDir)){
+        $null = New-Item -ItemType Directory -Path $OutDir -Name $ModuleName -Verbose:$VerbosePreference
+    }
+    $dir = New-Item -ItemType Directory -Path $ModuleOutDir2 -Name $ModuleVersion2 -Verbose:$VerbosePreference -Force
+
+    Copy-Item -Recurse -Exclude $Exclude -Path $PowerShellSrcRoot2/* -Destination $dir.FullName
+
+    & $DotNet build -c:Release
+    Copy-Item -Path "$PSScriptRoot/src/Cofl.Util/bin/Release/netstandard2.0/Cofl.Util.dll" -Destination "$ModuleOutDir2/$ModuleVersion2"
+}
+
+Task Deploy -depends Build,BuildGetFilteredChildItem {
 	if(!(Get-Module PSDeploy -ListAvailable)){
 		throw "$(psake.context.currentTaskName) - PSDeploy is not available, cannot deploy."
 	} else {
