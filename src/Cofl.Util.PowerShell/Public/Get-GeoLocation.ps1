@@ -3,11 +3,10 @@ using namespace System.Device.Location
 function Get-GeoLocation
 {
     [CmdletBinding(DefaultParameterSetName='ByLocationAPI')]
+    [OutputType([System.Device.Location.GeoCoordinate])]
     PARAM (
         [Parameter(Mandatory=$true,Position=0,ValueFromPipeline=$true,ParameterSetName='ByZipCode')]
-            [int]$ZipCode,
-        [Parameter()]
-            [switch]$UseAPI
+            [int]$ZipCode
     )
 
     begin
@@ -34,7 +33,7 @@ function Get-GeoLocation
             }
 
             $Location = $GeoData | Where-Object ZIP -EQ $ZipCode
-            [GeoCoordinate]::new($Location.LAT, $Location.LNG)
+            [GeoCoordinate]::new([double]$Location.LAT, [double]$Location.LNG)
         }
     }
 }

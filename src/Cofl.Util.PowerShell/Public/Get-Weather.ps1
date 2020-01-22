@@ -1,6 +1,9 @@
+using namespace System.Text
+
 function Get-Weather
 {
     [CmdletBinding(DefaultParameterSetName='ZipCodeForecast')]
+    [OutputType([string])]
     PARAM (
         [Parameter(Mandatory=$true,Position=0,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,ParameterSetName='ZipCodeForecast')]
         [Parameter(Mandatory=$true,Position=0,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,ParameterSetName='ZipCodeAlert')]
@@ -10,9 +13,9 @@ function Get-Weather
         [Parameter(Mandatory=$true,Position=0,ValueFromPipelineByPropertyName=$true,ParameterSetName='GeoAlert')]
         [Parameter(Mandatory=$true,Position=0,ValueFromPipelineByPropertyName=$true,ParameterSetName='GeoForecastAlert')]
             [double]$Latitude,
-        [Parameter(Mandatory=$true,Position=1,ValueFromPipeline=$true,ParameterSetName='GeoForecast')]
-        [Parameter(Mandatory=$true,Position=1,ValueFromPipeline=$true,ParameterSetName='GeoAlert')]
-        [Parameter(Mandatory=$true,Position=1,ValueFromPipeline=$true,ParameterSetName='GeoForecastAlert')]
+        [Parameter(Mandatory=$true,Position=1,ValueFromPipelineByPropertyName=$true,ParameterSetName='GeoForecast')]
+        [Parameter(Mandatory=$true,Position=1,ValueFromPipelineByPropertyName=$true,ParameterSetName='GeoAlert')]
+        [Parameter(Mandatory=$true,Position=1,ValueFromPipelineByPropertyName=$true,ParameterSetName='GeoForecastAlert')]
             [double]$Longitude,
         [Parameter(ParameterSetName='ZipCodeForecast')]
         [Parameter(ParameterSetName='GeoForecast')]
@@ -50,7 +53,7 @@ function Get-Weather
 
     begin
     {
-        $GeoData = Import-Csv -Path "$PSScriptRoot/../data/zip-geo.csv"
+        $GeoData = $null
         $Abbreviations = @{
             AL = 'Alabama';        AK = 'Alaska';         AZ = 'Arizona'
             AR = 'Arkansas';       CA = 'California';     CO = 'Colorado'
@@ -76,12 +79,12 @@ function Get-Weather
             TT = 'in the Trust Territory of the Pacific Islands'
         }
 
-        function Make-NiceDate ([datetime]$Date)
+        function Format-NiceDate ([datetime]$Date)
         {
             $Date.ToString('dddd MMMM * a\t h:mm tt') -replace '\*', (Get-OrdinalNumber -Number $Date.Day)
         }
 
-        function Make-AlertHeadline ($Alert)
+        function Format-AlertHeadline ($Alert)
         {
             [datetime]$Issued = $Alert.sent
             [datetime]$Effective = $Alert.effective
@@ -91,10 +94,10 @@ function Get-Weather
 
             if($Issued -eq $Effective)
             {
-                "$($Alert.status) $($Alert.severity) $($Alert.event) issued $(Make-NiceDate $Issued) for $AreaDescription, effective until $(Make-NiceDate $Ends). "
+                "$($Alert.status) $($Alert.severity) $($Alert.event) issued $(Format-NiceDate $Issued) for $AreaDescription, effective until $(Format-NiceDate $Ends). "
             } else
             {
-                "$($Alert.status) $($Alert.severity) $($Alert.event) issued $(Make-NiceDate $Issued) for $AreaDescription, effective from $(Make-NiceDate $Effective) until $(Make-NiceDate $Ends). "
+                "$($Alert.status) $($Alert.severity) $($Alert.event) issued $(Format-NiceDate $Issued) for $AreaDescription, effective from $(Format-NiceDate $Effective) until $(Format-NiceDate $Ends). "
             }
         }
     }
@@ -105,6 +108,11 @@ function Get-Weather
         $Location = @{ LAT = $Latitude; LNG = $Longitude }
         if($PSCmdlet.ParameterSetName.StartsWith('ZipCode'))
         {
+            if($null -eq $GeoData)
+            {
+                # Don't import the Zip/GPS mapping until we need it.
+                $GeoData = Import-Csv -Path "$PSScriptRoot/../data/zip-geo.csv"
+            }
             $Location = $GeoData | Where-Object ZIP -EQ $ZipCode
             if(!$Location)
             {
@@ -129,8 +137,7 @@ function Get-Weather
 
         $APIResponse = Invoke-RestMethod -Uri "$PointUri/forecast" -UseBasicParsing -Headers @{Accept='application/geo+json'}
         $ForecastData = $APIResponse.properties.periods[$PeriodsFromNow]
-        [string]$ResponseString = [string]::Empty
-        [System.Text.StringBuilder]$Output = [System.Text.StringBuilder]::new()
+        [StringBuilder]$Output = [StringBuilder]::new()
         [bool]$IsForecast = $PSCmdlet.ParameterSetName.Contains('Forecast') -or $PSBoundParameters.ContainsKey('ForecastType')
         [bool]$IsAlert = $PSBoundParameters.ContainsKey('AlertType')
 
@@ -183,7 +190,7 @@ function Get-Weather
             foreach($Alert in $APIResponse.features)
             {
                 $Alert = $Alert.properties
-                [string]$Headline = Make-AlertHeadline $Alert
+                [string]$Headline = Format-AlertHeadline $Alert
                 switch ($AlertType)
                 {
                     'Short' {

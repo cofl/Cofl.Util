@@ -1,6 +1,7 @@
 function Get-OrdinalNumber
 {
     [CmdletBinding()]
+    [OutputType([string])]
     PARAM (
         [Parameter(Mandatory=$true, ValueFromPipeline=$true)][int]$Number
     )

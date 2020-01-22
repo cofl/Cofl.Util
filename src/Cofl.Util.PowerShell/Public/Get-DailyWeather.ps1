@@ -1,3 +1,5 @@
+using namespace System
+
 <#
 .SYNOPSIS
 Says the forecast aloud.
@@ -21,11 +23,11 @@ function Get-DailyWeather
     [CmdletBinding()]
     PARAM (
         [Parameter()]
-            # Force the use of
+            # Force the weather to be said, even if it's already happened today.
             [switch]$Force
     )
-    $DateLocation = [System.Environment]::GetFolderPath('MyDocuments') + '/WindowsPowerShell/say-daily-weather.date'
-    $Last = try { Get-Date (Get-Content $DateLocation -ea 0) } catch { [datetime]::Today.AddDays(-1) }
+    [string]$DateLocation = [Environment]::GetFolderPath('MyDocuments') + '/WindowsPowerShell/say-daily-weather.date'
+    [datetime]$Last = try { Get-Date (Get-Content $DateLocation -ea 0) } catch { [datetime]::Today.AddDays(-1) }
     if($Last -lt [datetime]::Today -or $Force) {
         Set-Content -Path $DateLocation -NoNewLine -Encoding Ascii -Value ([datetime]::Today.ToString().Trim())
         $null = Start-Job -Name 'SayDailyWeatherJob' -ScriptBlock {
@@ -34,7 +36,7 @@ function Get-DailyWeather
             [int]$Century = $Now.Year / 100
             [int]$Year = $Now.Year % 100
             [string]$YearString = if($Year -lt 10) { "o $Year" } else { "$Year" }
-            $Greeting = switch($Now.Hour)
+            [string]$Greeting = switch($Now.Hour)
             {
                 { $_ -lt 12 } { 'Good morning.'; break; }
                 { $_ -lt 20} { 'Good afternoon.'; break; }
