@@ -69,7 +69,7 @@ Next, the cmdlet definition. If this were in PowerShell, we'd use the `[CmdletBi
 
 We also throw an `[OutputType]` attribute here so PowerShell's intellisense knows what's coming its way.
 
-        [Cmdlet(VerbsCommon.Get, "FilteredChildItem", DefaultParameterSetName = nameof    (GetFilteredChildItemCmdlet.ParameterSets.Default))]
+        [Cmdlet(VerbsCommon.Get, "FilteredChildItem", DefaultParameterSetName = nameof(GetFilteredChildItemCmdlet.ParameterSets.Default))]
         [OutputType(typeof(FileInfo), typeof(DirectoryInfo))]
         public sealed class GetFilteredChildItemCmdlet : PSCmdlet
         {
@@ -84,13 +84,13 @@ The two parameter sets this cmdlet supports are *Default* and *Literal*, split a
 
 The `Path` parameter isn't required. In binary cmdlets, parameters are given as [properties](https://docs.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/properties). We can assign our defaults the same way as normal; here, the default is the current location. It is possible to pass in multiple paths, either as an array, or via the pipeline. With `Path`, [wildcards](https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_wildcards?view=powershell-6) like `*` and `?` are processed, so something like `$BaseDir/*/inner` is possible. If a file is given instead of a directory, the only way to filter names is via the `IgnorePattern` parameter, which uses the file's parent directory as the base path.
 
-            [Parameter(ValueFromPipeline = true, ValueFromPipelineByPropertyName = true, Position = 0,     ParameterSetName = nameof(ParameterSets.Default))]
+            [Parameter(ValueFromPipeline = true, ValueFromPipelineByPropertyName = true, Position = 0, ParameterSetName = nameof(ParameterSets.Default))]
             [SupportsWildcards]
             public string[] Path { get; set; } = new[]{ "." };
 
 `LiteralPath` is similar to `Path`, except it doesn't support wildcards at all. This is useful if you have things like `[x64]` in your file or folder names; if such a path was given to `Path`, it would match an `x`, a `6`, or a `4`, but not `[x64]` &mdash; with `LiteralPath`, it's the opposite. `LiteralPath` is also aliased with `PSPath`, and accepts pipeline input by property names.
 
-            [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, ParameterSetName = nameof    (ParameterSets.Literal))]
+            [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, ParameterSetName = nameof(ParameterSets.Literal))]
             [Alias("PSPath")]
             public string[] LiteralPath { get; set; }
 
@@ -319,7 +319,7 @@ Otherwise, we clean up some other state-trackers and get ready to deal with a di
                         if(IgnoreRulePerDirectoryCounts.ContainsKey(top.FullName))
                         {
 
-If this is the second time we've seen this node, remove the rules  for this directory from the list. Then, remove this directory from the map (we won't see it again, so save some memory).
+If this is the second time we've seen this node, remove the rules for this directory from the list. Then, remove this directory from the map (we won't see it again, so save some memory).
 
                             ignoreRuleCount = IgnoreRulePerDirectoryCounts[top.FullName];
                             for(; ignoreRuleCount > 0; ignoreRuleCount -= 1)
