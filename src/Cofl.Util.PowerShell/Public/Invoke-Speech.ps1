@@ -2,7 +2,7 @@ using namespace System.Speech.Synthesis
 
 function Invoke-Speech
 {
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName='String')]
     PARAM(
         [Parameter()][ValidateSet('David', 'Zira')][string]$Voice = 'Zira',
         [Parameter(Mandatory=$true,ParameterSetName='String',ValueFromPipeline=$true,Position=0,ValueFromRemainingArguments=$true)][string[]]$String,
@@ -54,7 +54,7 @@ function Invoke-Speech
             {
                 foreach($Item in $SSMLString)
                 {
-                    if($null -ne $Item)
+                    if($Item)
                     {
                         $Speaker.SpeakSsml($Item)
                     }

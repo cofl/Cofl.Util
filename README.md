@@ -20,7 +20,7 @@ which will automatically build all binary component using the .NET Core SDK and 
 This one is particularly fun:
 
 ```powershell
-PS C:\> Get-Weather -ZipCode $ZipCode -ForecastType Detailed -AlertType Full -IncludeLocation -IncludeTime -IncludeAlertCount -Speakable | Say-String
+PS C:\> Get-GeoLocation | Get-Weather -ForecastType Detailed -AlertType Full -IncludeLocation -IncludeTime -IncludeAlertCount -Speakable | Invoke-Speech
 ```
 
 Just remember to put in your zipcode!
