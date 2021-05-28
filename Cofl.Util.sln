@@ -5,7 +5,9 @@ VisualStudioVersion = 15.0.26124.0
 MinimumVisualStudioVersion = 15.0.26124.0
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{3C479E7A-E4A9-467D-9DB0-88A1B374574B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cofl.Util", "src\Cofl.Util\Cofl.Util.csproj", "{BF6C53B2-B548-48F3-9269-1DE060D08B83}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cofl.GetFilteredChildItem", "src\Cofl.GetFilteredChildItem\Cofl.GetFilteredChildItem.csproj", "{BF6C53B2-B548-48F3-9269-1DE060D08B83}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cofl.EncodedStrings", "src\Cofl.EncodedStrings\Cofl.EncodedStrings.csproj", "{39AC89E4-6528-426B-9F92-E8EBBF1368B5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -32,8 +34,21 @@ Global
 		{BF6C53B2-B548-48F3-9269-1DE060D08B83}.Release|x64.Build.0 = Release|Any CPU
 		{BF6C53B2-B548-48F3-9269-1DE060D08B83}.Release|x86.ActiveCfg = Release|Any CPU
 		{BF6C53B2-B548-48F3-9269-1DE060D08B83}.Release|x86.Build.0 = Release|Any CPU
+		{39AC89E4-6528-426B-9F92-E8EBBF1368B5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{39AC89E4-6528-426B-9F92-E8EBBF1368B5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{39AC89E4-6528-426B-9F92-E8EBBF1368B5}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{39AC89E4-6528-426B-9F92-E8EBBF1368B5}.Debug|x64.Build.0 = Debug|Any CPU
+		{39AC89E4-6528-426B-9F92-E8EBBF1368B5}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{39AC89E4-6528-426B-9F92-E8EBBF1368B5}.Debug|x86.Build.0 = Debug|Any CPU
+		{39AC89E4-6528-426B-9F92-E8EBBF1368B5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{39AC89E4-6528-426B-9F92-E8EBBF1368B5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{39AC89E4-6528-426B-9F92-E8EBBF1368B5}.Release|x64.ActiveCfg = Release|Any CPU
+		{39AC89E4-6528-426B-9F92-E8EBBF1368B5}.Release|x64.Build.0 = Release|Any CPU
+		{39AC89E4-6528-426B-9F92-E8EBBF1368B5}.Release|x86.ActiveCfg = Release|Any CPU
+		{39AC89E4-6528-426B-9F92-E8EBBF1368B5}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{BF6C53B2-B548-48F3-9269-1DE060D08B83} = {3C479E7A-E4A9-467D-9DB0-88A1B374574B}
+		{39AC89E4-6528-426B-9F92-E8EBBF1368B5} = {3C479E7A-E4A9-467D-9DB0-88A1B374574B}
 	EndGlobalSection
 EndGlobal

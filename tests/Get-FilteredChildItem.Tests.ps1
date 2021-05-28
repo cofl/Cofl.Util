@@ -53,7 +53,9 @@ Describe 'Get-FilteredChildItem' {
             New-Item -ItemType File -Name 'test2'
         }
 
-        Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Verbose:$VerbosePreference | Should -Be 'test1', 'test2'
+        Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Verbose:$VerbosePreference |
+            Select-Object -ExpandProperty Name |
+            Should -Be 'test1', 'test2'
     }
 
     It 'Does not exclude any files if the ignore file is empty, except the ignore file.' {
@@ -63,7 +65,9 @@ Describe 'Get-FilteredChildItem' {
             New-Item -ItemType File -Name $IgnoreFileName
         }
 
-        Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -Be 'test1', 'test2'
+        Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName |
+            Select-Object -ExpandProperty Name |
+            Should -Be 'test1', 'test2'
     }
 
     It 'Does not exclude any files if the ignore file is empty and -IncludeIgnoreFiles is provided.' {
@@ -73,7 +77,9 @@ Describe 'Get-FilteredChildItem' {
             New-Item -ItemType File -Name $IgnoreFileName
         }
 
-        Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -IncludeIgnoreFiles | Should -Be ('test1', 'test2', $IgnoreFileName | Sort-Object)
+        Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -IncludeIgnoreFiles |
+            Select-Object -ExpandProperty Name |
+            Should -Be ('test1', 'test2', $IgnoreFileName | Sort-Object)
     }
 
     It 'Does not exclude any files if there are no matching files.' {
@@ -83,7 +89,9 @@ Describe 'Get-FilteredChildItem' {
             New-Item -ItemType File -Name $IgnoreFileName -Value 'test'
         }
 
-        Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -Be 'test1', 'test2'
+        Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName |
+            Select-Object -ExpandProperty Name |
+            Should -Be 'test1', 'test2'
     }
 
     It 'Ignores comments and blank lines' {
@@ -99,7 +107,9 @@ Describe 'Get-FilteredChildItem' {
 '@
         }
 
-        Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -Be 'test1', 'test2'
+        Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName |
+            Select-Object -ExpandProperty Name |
+            Should -Be 'test1', 'test2'
     }
 
     It 'Allows literal characters' {
@@ -113,7 +123,9 @@ Describe 'Get-FilteredChildItem' {
 '@
         }
 
-        Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -Be 'normal'
+        Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName |
+            Select-Object -ExpandProperty Name |
+            Should -Be 'normal'
     }
 
     It 'Outputs ignored files with -Ignored' {
@@ -150,7 +162,7 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName -Value 'test1'
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -Be 'test2'
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty Name | Should -Be 'test2'
         }
 
         It 'Excludes one file by provided general pattern' {
@@ -159,7 +171,7 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name 'test2'
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -IgnorePattern 'test1' | Should -Be 'test2'
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -IgnorePattern 'test1' | Select-Object -ExpandProperty Name | Should -Be 'test2'
         }
 
         It 'Excludes one file in a subdirectory by general pattern' {
@@ -171,7 +183,7 @@ Describe 'Get-FilteredChildItem' {
                 }
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -Be 'test2'
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty Name | Should -Be 'test2'
         }
 
         It 'Excludes one file in a subdirectory by immediate pattern' {
@@ -217,7 +229,7 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName -Value 'test?-file'
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -Be 'test-file1', 'test-file2'
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty Name | Should -Be 'test-file1', 'test-file2'
         }
 
         It 'Matches more than one single-character wildcard' {
@@ -228,7 +240,7 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName -Value 't???-file'
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -Be 'tes-file'
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty Name | Should -Be 'tes-file'
         }
 
         It 'Matches a set of characters' {
@@ -241,7 +253,7 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName -Value 'test[12]-file'
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -Be 'test-file1', 'test-file2', 'test3-file'
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty Name | Should -Be 'test-file1', 'test-file2', 'test3-file'
         }
 
         It 'Matches a range of characters' {
@@ -254,7 +266,7 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName -Value 'test[0-9]-file'
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -Be 'test-file1', 'test-file2'
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty Name | Should -Be 'test-file1', 'test-file2'
         }
 
         It 'Does not match a set of characters' {
@@ -267,7 +279,7 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName -Value 'test[!3-]-file'
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -Be 'test-file1', 'test-file2', 'test3-file'
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty Name | Should -Be 'test-file1', 'test-file2', 'test3-file'
         }
 
         It 'Does not match a range of characters' {
@@ -280,7 +292,7 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName -Value 'test[!2-4]-file'
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -Be 'test2-file', 'test3-file', 'test4-file'
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty Name | Should -Be 'test2-file', 'test3-file', 'test4-file'
         }
 
         It 'Matches any number of characters at the end of a file name' {
@@ -295,7 +307,7 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName -Value 'test-file*'
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -Be 'test1-file', 'test12345-file', 'test2-file'
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty Name | Should -Be 'test1-file', 'test12345-file', 'test2-file'
         }
 
         It 'Matches any number of characters in the middle of a file name' {
@@ -310,7 +322,7 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName -Value 'test*-file'
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -Be 'test-file1', 'test-file12345', 'test-file2'
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty Name | Should -Be 'test-file1', 'test-file12345', 'test-file2'
         }
 
         It 'Matches globstars' {
@@ -514,7 +526,7 @@ Describe 'Get-FilteredChildItem' {
 '@
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Should -Be 'test.txt'
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName | Select-Object -ExpandProperty Name | Should -Be 'test.txt'
         }
 
         It 'Excludes all files but one (name) in multiple directories' {
@@ -551,7 +563,7 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName -Value 'ignore-me'
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Hidden | Should -Be 'not-me'
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Hidden | Select-Object -ExpandProperty Name | Should -Be 'not-me'
         }
 
         It 'Doesn''t show files in hidden directories' {
@@ -613,7 +625,7 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName -Value 'ignore-me'
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Force | Should -Be 'not-me', 'or-me'
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Force | Select-Object -ExpandProperty Name | Should -Be 'not-me', 'or-me'
         }
 
         It 'Shows all items with -Hidden and -Force' {
@@ -624,7 +636,7 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName -Value 'ignore-me'
             }
 
-            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Hidden -Force | Should -Be 'not-me', 'or-me'
+            Get-FilteredChildItem -Path $TempDirectory -IgnoreFileName $IgnoreFileName -Hidden -Force | Select-Object -ExpandProperty Name | Should -Be 'not-me', 'or-me'
         }
     }
 
@@ -636,7 +648,8 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName
             }
 
-            Get-ChildItem -Path $TempDirectory | Get-FilteredChildItem -IgnoreFileName $IgnoreFileName |
+            Get-ChildItem -Path $TempDirectory |
+                Get-FilteredChildItem -IgnoreFileName $IgnoreFileName |
                 Select-Object -ExpandProperty Name | Should -Be 'test', 'test1'
         }
 
@@ -647,8 +660,10 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName -Value 'test'
             }
 
-            Get-ChildItem -Path $TempDirectory | Get-FilteredChildItem -IgnoreFileName $IgnoreFileName -IncludeIgnoreFiles |
-                Select-Object -ExpandProperty Name | Should -Be @($IgnoreFileName, 'test', 'test1' | Sort-Object)
+            Get-ChildItem -Path $TempDirectory |
+                Get-FilteredChildItem -IgnoreFileName $IgnoreFileName -IncludeIgnoreFiles |
+                Select-Object -ExpandProperty Name |
+                Should -Be @($IgnoreFileName, 'test', 'test1' | Sort-Object)
         }
 
         It 'Ignores Hidden files' {
@@ -658,8 +673,10 @@ Describe 'Get-FilteredChildItem' {
                 New-Item -ItemType File -Name $IgnoreFileName -Value 'test'
             }
 
-            Get-ChildItem -Path $TempDirectory -Force | Get-FilteredChildItem -IgnoreFileName $IgnoreFileName |
-                Select-Object -ExpandProperty Name | Should -Be 'test'
+            Get-ChildItem -Path $TempDirectory -Force |
+                Get-FilteredChildItem -IgnoreFileName $IgnoreFileName |
+                Select-Object -ExpandProperty Name |
+                Should -Be 'test'
         }
 
         It 'Enumerates files and directories' {
@@ -690,8 +707,10 @@ Describe 'Get-FilteredChildItem' {
                 }
             }
 
-            Get-ChildItem -Path $TempDirectory | Get-FilteredChildItem -IgnoreFileName $IgnoreFileName |
-                Select-Object -ExpandProperty FullName | Should -Be @(
+            Get-ChildItem -Path $TempDirectory |
+                Get-FilteredChildItem -IgnoreFileName $IgnoreFileName |
+                Select-Object -ExpandProperty FullName |
+                Should -Be @(
                     "${TempDirectory}${DirectorySeparator}inner${DirectorySeparator}test2${DirectorySeparator}test"
                     "${TempDirectory}${DirectorySeparator}inner2${DirectorySeparator}test-file"
                     "${TempDirectory}${DirectorySeparator}inner2${DirectorySeparator}potato${DirectorySeparator}ignore-me"

@@ -9,21 +9,12 @@ if(!$env:CoflNugetAPIKey)
 [string]$OldPSModulePath = $env:PSModulePath
 try
 {
-    [string]$ModuleVersion = (Import-PowerShellDataFile -Path "$PSScriptRoot/src/Cofl.Util.PowerShell/Cofl.Util.psd1").ModuleVersion
-    [string]$ModuleVersion2 = (Import-PowerShellDataFile -Path "$PSScriptRoot/src/Cofl.GetFilteredChildItem.PowerShell/Cofl.GetFilteredChildItem.psd1").ModuleVersion
     [string]$BuildRoot = "$PSScriptRoot/build"
-    [string]$Source = "$BuildRoot/Cofl.Util/$ModuleVersion/"
-    [string]$Source2 = "$BuildRoot/Cofl.GetFilteredChildItem/$ModuleVersion2/"
-    if(!(Test-Path $Source))
-    {
-        & "$PSScriptRoot/build.ps1" -Task Build, BuildGetFilteredChildItem
-    }
-
     $env:PSModulePath += [System.IO.Path]::PathSeparator + $BuildRoot
 
     Deploy 'Cofl.Util' {
         By PSGalleryModule {
-            FromSource -Source $Source
+            FromSource -Source "$BuildRoot/Cofl.Util/$((Import-PowerShellDataFile -Path "$PSScriptRoot/src/Cofl.Util.PowerShell/Cofl.Util.psd1").ModuleVersion)/"
             To -Targets PSGallery
             WithOptions -Options @{
                 ApiKey = $env:CoflNugetAPIKey
@@ -33,7 +24,17 @@ try
 
     Deploy 'Cofl.GetFilteredChildItem' {
         By PSGalleryModule {
-            FromSource -Source $Source2
+            FromSource -Source "$BuildRoot/Cofl.GetFilteredChildItem/$((Import-PowerShellDataFile -Path "$PSScriptRoot/src/Cofl.GetFilteredChildItem.PowerShell/Cofl.GetFilteredChildItem.psd1").ModuleVersion)/"
+            To -Targets PSGallery
+            WithOptions -Options @{
+                ApiKey = $env:CoflNugetAPIKey
+            }
+        }
+    }
+
+    Deploy 'Cofl.EncodedStrings' {
+        By PSGalleryModule {
+            FromSource -Source "$BuildRoot/Cofl.EncodedStrings/$((Import-PowerShellDataFile -Path "$PSScriptRoot/src/Cofl.EncodedStrings.PowerShell/Cofl.EncodedStrings.psd1").ModuleVersion)/"
             To -Targets PSGallery
             WithOptions -Options @{
                 ApiKey = $env:CoflNugetAPIKey

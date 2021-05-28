@@ -4,20 +4,37 @@
 
 [string]$DotNet = Get-Command 'dotnet.exe' -CommandType Application -ErrorAction Stop | Select-Object -ExpandProperty Source
 
-[string]$PowerShellSrcRoot = "$PSScriptRoot/src/Cofl.Util.PowerShell"
-[string]$PowerShellSrcRoot2 = "$PSScriptRoot/src/Cofl.GetFilteredChildItem.PowerShell"
-[string]$OutName = 'build'
-[string]$OutDir = "$PSScriptRoot/$OutName"
-[string]$ModuleName = 'Cofl.Util'
-[string]$ModuleOutDir = "$OutDir/$ModuleName"
-[string]$ModuleName2 = 'Cofl.GetFilteredChildItem'
-[string]$ModuleOutDir2 = "$OutDir/$ModuleName2"
+[string]$OutDir = "$PSScriptRoot/build"
+$Modules = @{
+    'Cofl.Util' = @{
+        Version = (Import-PowerShellDataFile -Path "$PSScriptRoot/src/Cofl.Util.PowerShell/Cofl.Util.psd1" -ErrorAction Stop).ModuleVersion
+        Source = "$PSScriptRoot/src/Cofl.Util.PowerShell"
+        Include = @(
+            'Cofl.GetFilteredChildItem'
+            'Cofl.EncodedStrings'
+        )
+    }
+    'Cofl.GetFilteredChildItem' = @{
+        Version = (Import-PowerShellDataFile -Path "$PSScriptRoot/src/Cofl.GetFilteredChildItem.PowerShell/Cofl.GetFilteredChildItem.psd1" -ErrorAction Stop).ModuleVersion
+        Source = "$PSScriptRoot/src/Cofl.GetFilteredChildItem.PowerShell"
+        Include = @(
+            'Cofl.GetFilteredChildItem'
+        )
+    }
+    'Cofl.EncodedStrings' = @{
+        Version = (Import-PowerShellDataFile -Path "$PSScriptRoot/src/Cofl.EncodedStrings.PowerShell/Cofl.EncodedStrings.psd1" -ErrorAction Stop).ModuleVersion
+        Source = "$PSScriptRoot/src/Cofl.EncodedStrings.PowerShell"
+        Include = @(
+            'Cofl.EncodedStrings'
+        )
+    }
+}
 
 Task default -depends Build
 
 Task Init {
 	if(!(Test-Path -LiteralPath $OutDir)){
-		$null = New-Item -ItemType Directory -Path $PSScriptRoot -Name $OutName -Verbose:$VerbosePreference
+		$null = New-Item -ItemType Directory -Path $OutDir -Verbose:$VerbosePreference
 	} else {
 		Write-Verbose "$($psake.context.currentTaskName) - directory already exists."
 	}
@@ -30,50 +47,36 @@ Task Clean -depends Init {
     }
 }
 
-Task BuildPowerShell -depends Clean {
-    if([string]::IsNullOrWhiteSpace($ModuleVersion)){
-        $ModuleVersion = '0.0.0'
-    }
-	if(!(Test-Path -LiteralPath $ModuleOutDir)){
-        $null = New-Item -ItemType Directory -Path $OutDir -Name $ModuleName -Verbose:$VerbosePreference
-    }
-    $dir = New-Item -ItemType Directory -Path $ModuleOutDir -Name $ModuleVersion -Verbose:$VerbosePreference -Force
-
-    Copy-Item -Recurse -Exclude $Exclude -Path $PowerShellSrcRoot/* -Destination $dir.FullName
-}
-
-Task Build -depends BuildPowerShell {
-    if([string]::IsNullOrWhiteSpace($ModuleVersion)){
-        $ModuleVersion = '0.0.0'
-    }
+Task BuildRelease -depends Clean {
     & $DotNet build -c:Release
-    Copy-Item -Path "$PSScriptRoot/src/Cofl.Util/bin/Release/netstandard2.0/Cofl.Util.dll" -Destination "$ModuleOutDir/$ModuleVersion"
 }
 
-Task BuildDebug -depends BuildPowerShell {
-    if([string]::IsNullOrWhiteSpace($ModuleVersion)){
-        $ModuleVersion = '0.0.0'
-    }
+Task BuildDebug -depends Clean {
     & $DotNet build -c:Debug
-    Copy-Item -Path "$PSScriptRoot/src/Cofl.Util/bin/Debug/netstandard2.0/Cofl.Util.dll" -Destination "$ModuleOutDir/$ModuleVersion"
 }
 
-Task BuildGetFilteredChildItem -depends Init {
-    if([string]::IsNullOrWhiteSpace($ModuleVersion2)){
-        $ModuleVersion2 = '0.0.0'
-    }
-    if(!(Test-Path -LiteralPath $ModuleOutDir)){
-        $null = New-Item -ItemType Directory -Path $OutDir -Name $ModuleName -Verbose:$VerbosePreference
-    }
-    $dir = New-Item -ItemType Directory -Path $ModuleOutDir2 -Name $ModuleVersion2 -Verbose:$VerbosePreference -Force
+foreach($ModuleName in $Modules.Keys){
+    $Version = $Modules[$ModuleName].Version
+    Task "$ModuleName - Init" -depends Init ([scriptblock]::Create(@"
+    Copy-Item -Recurse -Path "$($Modules[$ModuleName].Source)/*" -Destination (New-Item -ItemType Directory -Path "`$OutDir/$ModuleName/$Version" -Force).FullName;
+"@))
 
-    Copy-Item -Recurse -Exclude $Exclude -Path $PowerShellSrcRoot2/* -Destination $dir.FullName
+    Task $ModuleName -depends BuildRelease, "$ModuleName - Init" ([scriptblock]::Create(@"
+    $(foreach($Include in $Modules[$ModuleName].Include){@"
+    Copy-Item -Path "$PSScriptRoot/src/$Include/bin/Release/netstandard2.0/$Include.dll" -Destination (New-Item -ItemType Directory -Path "`$OutDir/$ModuleName/$Version" -Force).FullName;
+"@})
+"@))
 
-    & $DotNet build -c:Release
-    Copy-Item -Path "$PSScriptRoot/src/Cofl.Util/bin/Release/netstandard2.0/Cofl.Util.dll" -Destination "$ModuleOutDir2/$ModuleVersion2"
+    Task "DEBUG - $ModuleName" -depends BuildDebug, "$ModuleName - Init" ([scriptblock]::Create(@"
+    $(foreach($Include in $Modules[$ModuleName].Include){@"
+    Copy-Item -Path "$PSScriptRoot/src/$Include/bin/Debug/netstandard2.0/$Include.dll" -Destination (New-Item -ItemType Directory -Path "`$OutDir/$ModuleName/$Version" -Force).FullName;
+"@})
+"@))
 }
 
-Task Deploy -depends Build,BuildGetFilteredChildItem {
+Task Build -depends $Modules.Keys
+
+Task Deploy -depends Build {
 	if(!(Get-Module PSDeploy -ListAvailable)){
 		throw "$(psake.context.currentTaskName) - PSDeploy is not available, cannot deploy."
 	} else {
@@ -84,8 +87,8 @@ Task Deploy -depends Build,BuildGetFilteredChildItem {
 	Pop-Location
 }
 
-Task Test -depends BuildDebug {
-    Import-Module "$ModuleOutdir/$ModuleVersion/Cofl.Util.psd1" -Force
+Task Test -depends ($Modules.Keys | ForEach-Object { "DEBUG - $_" }) {
+    Import-Module "$OutDir/Cofl.Util/$($Modules['Cofl.Util'].Version)/Cofl.Util.psd1" -Force
     Push-Location $PSScriptRoot
 	Invoke-Pester -Verbose:$VerbosePreference
 	Pop-Location
