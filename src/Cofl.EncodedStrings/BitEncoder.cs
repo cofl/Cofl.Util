@@ -64,7 +64,7 @@ namespace Cofl.EncodedStrings
             
             if(HasPadding)
             {
-                var paddingCharacters = (ulong)CharactersToMatchByteLength - emittedCharacters % (ulong)CharactersToMatchByteLength;
+                var paddingCharacters = (CharactersToMatchByteLength - (byte)(emittedCharacters % (ulong)CharactersToMatchByteLength)) % CharactersToMatchByteLength;
                 while(paddingCharacters --> 0)
                     yield return PaddingCharacter;
             }
