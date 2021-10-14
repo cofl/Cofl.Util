@@ -41,6 +41,16 @@ try
             }
         }
     }
+
+    Deploy 'Cofl.Menu' {
+        By PSGalleryModule {
+            FromSource -Source "$BuildRoot/Cofl.Menu/$((Import-PowerShellDataFile -Path "$PSScriptRoot/src/Cofl.Menu.PowerShell/Cofl.Menu.psd1").ModuleVersion)/"
+            To -Targets PSGallery
+            WithOptions -Options @{
+                ApiKey = $env:CoflNugetAPIKey
+            }
+        }
+    }
 } finally
 {
     $env:PSModulePath = $OldPSModulePath
