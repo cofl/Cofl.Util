@@ -1,5 +1,6 @@
 $null = Import-Module -Name "$PSScriptRoot/Cofl.GetFilteredChildItem.dll" -Scope Local
 $null = Import-Module -Name "$PSScriptRoot/Cofl.EncodedStrings.dll" -Scope Local
+$null = Import-Module -Name "$PSScriptRoot/Cofl.Menu.dll" -Scope Local
 
 [bool]$LoadedSystemDevice = $null -ne (Add-Type -AssemblyName System.Device -ErrorAction SilentlyContinue -PassThru)
 [bool]$LoadedSystemSpeech = $null -ne (Add-Type -AssemblyName System.Speech -ErrorAction SilentlyContinue -PassThru)

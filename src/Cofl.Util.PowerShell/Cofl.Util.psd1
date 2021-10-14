@@ -22,5 +22,12 @@
         'ConvertTo-EncodedString'
         'ConvertFrom-EncodedString'
         'Get-FilteredChildItem'
+
+        # menu cmdlets
+        'Invoke-Menu'
+        'New-Menu'
+        'New-MenuDelayedTask'
+        'New-MenuFunction'
+        'New-MenuText'
     )
 }

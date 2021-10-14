@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cofl.GetFilteredChildItem",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cofl.EncodedStrings", "src\Cofl.EncodedStrings\Cofl.EncodedStrings.csproj", "{39AC89E4-6528-426B-9F92-E8EBBF1368B5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cofl.Menu", "src\Cofl.Menu\Cofl.Menu.csproj", "{DE496892-E1B3-4F70-8B71-672F27602BAD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -46,9 +48,22 @@ Global
 		{39AC89E4-6528-426B-9F92-E8EBBF1368B5}.Release|x64.Build.0 = Release|Any CPU
 		{39AC89E4-6528-426B-9F92-E8EBBF1368B5}.Release|x86.ActiveCfg = Release|Any CPU
 		{39AC89E4-6528-426B-9F92-E8EBBF1368B5}.Release|x86.Build.0 = Release|Any CPU
+		{DE496892-E1B3-4F70-8B71-672F27602BAD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DE496892-E1B3-4F70-8B71-672F27602BAD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DE496892-E1B3-4F70-8B71-672F27602BAD}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{DE496892-E1B3-4F70-8B71-672F27602BAD}.Debug|x64.Build.0 = Debug|Any CPU
+		{DE496892-E1B3-4F70-8B71-672F27602BAD}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{DE496892-E1B3-4F70-8B71-672F27602BAD}.Debug|x86.Build.0 = Debug|Any CPU
+		{DE496892-E1B3-4F70-8B71-672F27602BAD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DE496892-E1B3-4F70-8B71-672F27602BAD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DE496892-E1B3-4F70-8B71-672F27602BAD}.Release|x64.ActiveCfg = Release|Any CPU
+		{DE496892-E1B3-4F70-8B71-672F27602BAD}.Release|x64.Build.0 = Release|Any CPU
+		{DE496892-E1B3-4F70-8B71-672F27602BAD}.Release|x86.ActiveCfg = Release|Any CPU
+		{DE496892-E1B3-4F70-8B71-672F27602BAD}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{BF6C53B2-B548-48F3-9269-1DE060D08B83} = {3C479E7A-E4A9-467D-9DB0-88A1B374574B}
 		{39AC89E4-6528-426B-9F92-E8EBBF1368B5} = {3C479E7A-E4A9-467D-9DB0-88A1B374574B}
+		{DE496892-E1B3-4F70-8B71-672F27602BAD} = {3C479E7A-E4A9-467D-9DB0-88A1B374574B}
 	EndGlobalSection
 EndGlobal

@@ -12,6 +12,7 @@ $Modules = @{
         Include = @(
             'Cofl.GetFilteredChildItem'
             'Cofl.EncodedStrings'
+            'Cofl.Menu'
         )
     }
     'Cofl.GetFilteredChildItem' = @{
@@ -26,6 +27,13 @@ $Modules = @{
         Source = "$PSScriptRoot/src/Cofl.EncodedStrings.PowerShell"
         Include = @(
             'Cofl.EncodedStrings'
+        )
+    }
+    'Cofl.Menu' = @{
+        Version = (Import-PowerShellDataFile -Path "$PSScriptRoot/src/Cofl.Menu.PowerShell/Cofl.Menu.psd1" -ErrorAction Stop).ModuleVersion
+        Source = "$PSScriptRoot/src/Cofl.Menu.PowerShell"
+        Include = @(
+            'Cofl.Menu'
         )
     }
 }
