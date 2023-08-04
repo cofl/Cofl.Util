@@ -135,7 +135,7 @@ function Get-Weather
             $Location = "Latitude $Latitude, Longitude $Longitude, "
         }
 
-        $APIResponse = Invoke-RestMethod -Uri "$PointUri/forecast" -UseBasicParsing -Headers @{Accept='application/geo+json'}
+        $APIResponse = Invoke-RestMethod -Uri $PointData.properties.forecast -UseBasicParsing -Headers @{Accept='application/geo+json'}
         $ForecastData = $APIResponse.properties.periods[$PeriodsFromNow]
         [StringBuilder]$Output = [StringBuilder]::new()
         [bool]$IsForecast = $PSCmdlet.ParameterSetName.Contains('Forecast') -or $PSBoundParameters.ContainsKey('ForecastType')
